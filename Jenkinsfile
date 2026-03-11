@@ -72,7 +72,9 @@ pipeline {
         stage('Package (Wheel)') {
             steps {
                 sh '''
-                    echo "1.0.${BUILD_NUMBER}" > VERSION
+                    . venv/bin/activate
+                    pip install build
+                    echo "1.0.${BUILD_NUMBER}"
                     python3 -m build
                 '''
             }
