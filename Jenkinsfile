@@ -84,6 +84,8 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: "${NEXUS_CREDENTIAL_ID}", usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     sh '''
+                        . venv/bin/activate
+                        pip install twine
                         export TWINE_USERNAME=$USER
                         export TWINE_PASSWORD=$PASS
                         # --repository-url debe apuntar al repo PyPI de Nexus
