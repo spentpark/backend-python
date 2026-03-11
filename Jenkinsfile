@@ -33,7 +33,7 @@ pipeline {
                     . venv/bin/activate
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest pytest-cov sonar-scanner build twine
+                    pip install pytest pytest-cov build twine
                 '''
             }
         }
