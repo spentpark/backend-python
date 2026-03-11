@@ -1,34 +1,39 @@
 pipeline {
-    agent {
-        docker { 
-            image 'python:3.13-slim' 
-            // Esto permite que el contenedor use la red del host para ver a Nexus/Sonar
-            args '--network host' 
-        }
-    }
+    agent any
 
     environment {
-        // Nexus Config (Usamos la IP interna de Docker o localhost si están en la misma red)
+        // Nexus Config
+        NEXUS_VERSION       = "nexus3"
+        NEXUS_PROTOCOL      = "http"
         NEXUS_URL           = "172.17.0.1:8081"
-        NEXUS_REPOSITORY    = "python-nexus-repo" 
+        NEXUS_REPOSITORY    = "python-nexus-repo" // Asegúrate de crear un repo tipo 'pypi' en Nexus
         NEXUS_CREDENTIAL_ID = "nexus"
 
         // Sonar Config
         SONAR_HOST_URL = "http://172.17.0.1:9000"
         SONAR_TOKEN    = "squ_d27dacd45a6c18772d7e941fd44e1617cf5c4c38"
-        
-        // Evita que Python genere archivos .pyc innecesarios
-        PYTHONDONTWRITEBYTECODE = "1"
+
+        APP_VERSION   = ""
+        ARTIFACT_FILE = ""
+        PATH = "/usr/bin:$PATH"
     }
 
     stages {
-        stage('Install Dependencies') {
+        stage('Clean Install') {
             steps {
                 sh '''
-                    python3 -m pip install --upgrade pip
+                    echo "Python version:"
+                    python3 --version
+
+                    echo "Cleaning workspace..."
+                    rm -rf venv build dist *.egg-info .pytest_cache coverage.xml htmlcov
+
+                    echo "Creating virtual environment and installing dependencies..."
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
                     pip install -r requirements.txt
-                    # Instalamos herramientas de CI/CD
-                    pip install pytest pytest-cov build twine
+                    pip install pytest pytest-cov sonar-scanner build twine
                 '''
             }
         }
