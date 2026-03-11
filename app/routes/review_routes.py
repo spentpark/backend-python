@@ -14,7 +14,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 async def get_controller(db: AsyncSession = Depends(get_db)):
     repo = ReviewRepository(db)
     service = ReviewService(repo)
-    return ReviewController(service)
+    return await ReviewController(service)
 
 @router.get("/{id}", response_model=List[ReviewResponse])
 async def get_by_game_id(id: int, ctrl: ReviewController = Depends(get_controller)):

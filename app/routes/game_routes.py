@@ -14,7 +14,7 @@ router = APIRouter(prefix="/games", tags=["Games"])
 async def get_controller(db: AsyncSession = Depends(get_db)):
     repo = GameRepository(db)
     service = GameService(repo)
-    return GameController(service)
+    return await GameController(service)
 
 @router.get("/search", response_model=PaginatedGameResponse)
 async def search(
