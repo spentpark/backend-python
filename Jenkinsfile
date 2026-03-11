@@ -15,6 +15,7 @@ pipeline {
 
         APP_VERSION   = ""
         ARTIFACT_FILE = ""
+        PATH = "/usr/bin:$PATH"
     }
 
     stages {
