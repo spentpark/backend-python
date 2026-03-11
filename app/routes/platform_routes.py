@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_db
-from repositories.platform_repo import PlatformRepository
-from services.platform_service import PlatformService
-from controllers.platform_controller import PlatformController
-from schemas.platform_schema import PlatformCreate, PlatformResponse
+from app.database import get_db # <-- AGREGAR app.
+from app.repositories.platform_repo import PlatformRepository # <-- AGREGAR app.
+from app.services.platform_service import PlatformService # <-- AGREGAR app.
+from app.controllers.platform_controller import PlatformController # <-- AGREGAR app.
+from app.schemas.platform_schema import PlatformCreate, PlatformResponse # <-- AGREGAR app.
 from typing import List
 
 router = APIRouter(prefix="/platforms", tags=["Platforms"])

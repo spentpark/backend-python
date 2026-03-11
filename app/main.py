@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from routes.platform_routes import router as platform_router
-from routes.game_routes import router as game_router
-from routes.review_routes import router as review_router
+from app.routes.platform_routes import router as platform_router
+from app.routes.game_routes import router as game_router
+from app.routes.review_routes import router as review_router
 
 app = FastAPI()
 

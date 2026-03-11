@@ -1,4 +1,4 @@
-from repositories.platform_repo import PlatformRepository
+from app.repositories.platform_repo import PlatformRepository
 
 class PlatformService:
     def __init__(self, repository: PlatformRepository):

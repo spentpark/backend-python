@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from services.platform_service import PlatformService
+from app.services.platform_service import PlatformService
 
 class PlatformController:
     def __init__(self, service: PlatformService):

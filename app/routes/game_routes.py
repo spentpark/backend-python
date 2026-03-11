@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
+
+# Imports con prefijo app.
 from app.database import get_db
 from app.repositories.game_repo import GameRepository
 from app.services.game_service import GameService
 from app.controllers.game_controller import GameController
 from app.schemas.game_schema import GameCreate, GameResponse, PaginatedGameResponse
-from typing import List, Optional
 
 router = APIRouter(prefix="/games", tags=["Games"])
 
@@ -14,7 +16,6 @@ async def get_controller(db: AsyncSession = Depends(get_db)):
     service = GameService(repo)
     return GameController(service)
 
-# Rutas específicas primero (como en tu Express router)
 @router.get("/search", response_model=PaginatedGameResponse)
 async def search(
     title: str, 
@@ -31,7 +32,6 @@ async def get_all(
     limit: int = Query(10, alias="limit"), 
     ctrl: GameController = Depends(get_controller)
 ):
-    # Si no hay plataforma, podrías adaptar para que devuelva todos paginados
     return await ctrl.filter_by_platform(platform, page, limit)
 
 @router.get("/{id}", response_model=GameResponse)

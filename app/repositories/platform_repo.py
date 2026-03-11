@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from models.platform import Platform
+from app.models.platform import Platform
 
 class PlatformRepository:
     def __init__(self, db: AsyncSession):
