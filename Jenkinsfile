@@ -59,8 +59,9 @@ pipeline {
                         fi
 
                         sonar-scanner \
-                          -Dsonar.projectKey=mi-app-python \
+                          -Dsonar.projectKey=backend-python \
                           -Dsonar.sources=app \
+                          -Dsonar.tests=tests \
                           -Dsonar.python.coverage.reportPaths=coverage.xml \
                           -Dsonar.host.url=${SONAR_HOST_URL} \
                           -Dsonar.token=${SONAR_TOKEN}
