@@ -22,21 +22,24 @@ pipeline {
         stage('Clean Install') {
             steps {
                sh '''
-                    echo "Instalando dependencias del sistema..."
-                    # Actualiza e instala python3-venv (y pip por si acaso)
-                    sudo apt-get update && sudo apt-get install -y python3.13-venv python3-pip || \
-                    apt-get update && apt-get install -y python3.13-venv python3-pip
-
                     echo "Python version:"
                     python3 --version
+                    
                     echo "Cleaning workspace..."
                     rm -rf venv build dist *.egg-info .pytest_cache coverage.xml htmlcov
                     
-                    echo "Creating virtual environment..."
-                    python3 -m venv venv
+                    echo "Creating virtual environment (without pip)..."
+                    # El flag --without-pip evita que falle por la falta de ensurepip
+                    python3 -m venv venv --without-pip
                     
-                    echo "Installing dependencies..."
+                    echo "Bootstrapping pip manually via curl..."
+                    # Activamos el venv e instalamos pip descargándolo directamente
                     . venv/bin/activate
+                    curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+                    python3 get-pip.py
+                    rm get-pip.py
+                    
+                    echo "Installing project dependencies..."
                     pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
