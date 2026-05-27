@@ -11,7 +11,7 @@ from app.schemas.review_schema import ReviewResponse
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
-async def get_controller(db: AsyncSession = Depends(get_db)):
+def get_controller(db: AsyncSession = Depends(get_db)):
     repo = ReviewRepository(db)
     service = ReviewService(repo)
     return ReviewController(service)

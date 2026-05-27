@@ -10,7 +10,7 @@ from typing import List
 router = APIRouter(prefix="/platforms", tags=["Platforms"])
 
 # Inyección de dependencias para obtener el controlador configurado
-async def get_controller(db: AsyncSession = Depends(get_db)):
+def get_controller(db: AsyncSession = Depends(get_db)):
     repo = PlatformRepository(db)
     service = PlatformService(repo)
     return PlatformController(service)

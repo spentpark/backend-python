@@ -11,7 +11,7 @@ from app.schemas.game_schema import GameCreate, GameResponse, PaginatedGameRespo
 
 router = APIRouter(prefix="/games", tags=["Games"])
 
-async def get_controller(db: AsyncSession = Depends(get_db)):
+def get_controller(db: AsyncSession = Depends(get_db)):
     repo = GameRepository(db)
     service = GameService(repo)
     return GameController(service)
