@@ -46,7 +46,7 @@ pipeline {
             }
         }
 
-        stage('Test & Sonar Analysis') {
+ stage('Test & Sonar Analysis') {
     steps {
         script {
             sh '''
@@ -63,21 +63,17 @@ pipeline {
                 SONAR_DIR="$(pwd)/sonar-scanner"
 
                 if [ ! -f "${SONAR_DIR}/bin/sonar-scanner" ]; then
-                    echo "Instalando sonar-scanner via unzip desde mirror alternativo..."
-
-                    # Mirror alternativo de Maven Central
+                    echo "Descargando sonar-scanner..."
                     curl -fL "https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/6.0.0.4432/sonar-scanner-cli-6.0.0.4432.zip" \
-                         -o sonar-scanner.zip || \
-                    # Segundo fallback: versión más antigua y estable
-                    curl -fL "https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/5.0.1.3006/sonar-scanner-cli-5.0.1.3006.zip" \
                          -o sonar-scanner.zip
-
                     python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('sonar-scanner-extracted')"
                     rm sonar-scanner.zip
-
-                    # Mover el directorio extraído a nombre fijo
                     mv sonar-scanner-extracted/sonar-scanner-* "${SONAR_DIR}"
                 fi
+
+                echo "==> Aplicando permisos..."
+                chmod -R +x "${SONAR_DIR}/bin/"
+                chmod -R +x "${SONAR_DIR}/jre/bin/" 2>/dev/null || true
 
                 export PATH=$PATH:${SONAR_DIR}/bin
 
