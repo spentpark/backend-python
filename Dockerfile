@@ -36,7 +36,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copiar el código de la aplicación
 # (Asegúrate de que el contexto de build sea la raíz del proyecto)
 COPY app/ ./app/
-COPY .env .env
 
 # Crear un usuario no root por seguridad
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /app

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/platforms", tags=["Platforms"])
 async def get_controller(db: AsyncSession = Depends(get_db)):
     repo = PlatformRepository(db)
     service = PlatformService(repo)
-    return await PlatformController(service)
+    return PlatformController(service)
 
 @router.get("/", response_model=List[PlatformResponse])
 async def get_all(ctrl: PlatformController = Depends(get_controller)):
