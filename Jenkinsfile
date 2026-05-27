@@ -24,16 +24,15 @@ pipeline {
                 sh '''
                     echo "Python version:"
                     python3 --version
-
                     echo "Cleaning workspace..."
                     rm -rf venv build dist *.egg-info .pytest_cache coverage.xml htmlcov
-
-                    echo "Creating virtual environment and installing dependencies..."
+                    
+                    echo "Creating virtual environment..."
                     python3 -m venv venv
+                    
+                    echo "Installing dependencies..."
                     . venv/bin/activate
-                    pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest pytest-cov build twine
                 '''
             }
         }

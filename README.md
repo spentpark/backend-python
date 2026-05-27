@@ -1,7 +1,14 @@
 # backend-python
 Backend in Python
 
+Instalar ambiente
+python3 -m venv venv
+
+Activar ambiente
+source venv/bin/activate
+
 Instalar librerias
+pip install --upgrade pip
 pip install -r requirements.txt
 
 Iniciar aplicacion
