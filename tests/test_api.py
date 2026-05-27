@@ -7,8 +7,12 @@ from app.main import app
 from app.database import Base, get_db
 import asyncio
 
-# Importamos los modelos desde tus módulos de la app
-from app.models import Platform, Game, Review
+# Cambia la importación y cómo las instancias en el setup_db:
+from app.models import platform, game, review
+
+# Y dentro de tu fixture setup_db() cámbialo a:
+test_platform = platform(id=1, description="PlayStation 5", url="https://ps5.com")
+test_game = game(id=1, title="Elden Ring", platform_id=1)
 
 # 1. Configuración de Base de Datos de Prueba (SQLite en memoria con StaticPool)
 DATABASE_URL_TEST = "sqlite+aiosqlite:///:memory:"
