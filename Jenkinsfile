@@ -66,10 +66,10 @@ pipeline {
                             echo "Descargando sonar-scanner de forma segura..."
                             
                             # Usamos comillas simples alrededor del User-Agent para que Jenkins no se confunda con los espacios
-                            curl -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -sSLo sonar-scanner.zip -L "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip"
+                            sh "curl -fL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip -o sonar-scanner.zip"
                             
                             echo "Descomprimiendo usando Python..."
-                            python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')"
+                            sh "python3 -c \"import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')\""
                             rm sonar-scanner.zip
                         fi
                         

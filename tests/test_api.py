@@ -7,7 +7,7 @@ from app.database import Base, get_db
 import asyncio
 
 # Importamos tus modelos para el seed data (ajusta los nombres de las clases según tu app)
-from app.models import Platform, Game  # <-- Asegúrate de que las rutas sean correctas
+from app.models import platform, game, review # <-- Asegúrate de que las rutas sean correctas
 
 # 1. Configuración de Base de Datos de Prueba (SQLite en memoria)
 DATABASE_URL_TEST = "sqlite+aiosqlite:///:memory:"
