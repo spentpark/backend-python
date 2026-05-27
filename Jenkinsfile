@@ -21,7 +21,12 @@ pipeline {
     stages {
         stage('Clean Install') {
             steps {
-                sh '''
+               sh '''
+                    echo "Instalando dependencias del sistema..."
+                    # Actualiza e instala python3-venv (y pip por si acaso)
+                    sudo apt-get update && sudo apt-get install -y python3.13-venv python3-pip || \
+                    apt-get update && apt-get install -y python3.13-venv python3-pip
+
                     echo "Python version:"
                     python3 --version
                     echo "Cleaning workspace..."
@@ -32,6 +37,7 @@ pipeline {
                     
                     echo "Installing dependencies..."
                     . venv/bin/activate
+                    pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
             }
