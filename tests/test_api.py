@@ -77,5 +77,5 @@ async def test_search_game_by_title():
 @pytest.mark.asyncio
 async def test_get_reviews_not_found():
     async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.get("/reviews/999")
+        response = await ac.get("/reviews/1")
     assert response.status_code == 404
