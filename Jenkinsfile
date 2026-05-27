@@ -52,22 +52,27 @@ pipeline {
                     sh '''
                         echo "==> Activando entorno virtual y ejecutando tests..."
                         . venv/bin/activate
-                        # Asegurar que pytest-cov esté instalado para el reporte
-                        pip install pytest pytest-cov
+                        
+                        # Instalamos las dependencias necesarias para los tests que faltan en requirements.txt
+                        pip install pytest pytest-cov httpx
                         
                         pytest --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
                     '''
                     
                     sh '''
                         echo "==> Configurando Sonar-Scanner..."
-                        # Si no tienes el sonar-scanner instalado, lo descargamos usando curl y tar
                         if ! command -v sonar-scanner &> /dev/null; then
-                            echo "Descargando sonar-scanner de forma portátil..."
-                            # Descargamos la versión .tar.gz (así usamos tar en vez de unzip)
-                            curl -sSLo sonar-scanner.tar.gz https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux-x64.tar.gz
-                            tar -xzf sonar-scanner.tar.gz
-                            rm sonar-scanner.tar.gz
-                            export PATH=$PATH:$(pwd)/sonar-scanner-5.0.1.3006-linux-x64/bin
+                            echo "Descargando sonar-scanner (Binario universal CLI)..."
+                            
+                            # Usamos la URL que contiene el binario portable oficial (v6.0 en formato zip de forma segura con Python)
+                            # Como no tienes 'unzip' nativo, usaremos python para descomprimir el archivo descargado
+                            curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip
+                            
+                            echo "Descomprimiendo usando Python..."
+                            python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')"
+                            rm sonar-scanner.zip
+                            
+                            export PATH=$PATH:$(pwd)/sonar-scanner-6.0.0.4432-linux-x64/bin
                         fi
 
                         echo "==> Ejecutando análisis en SonarQube..."
