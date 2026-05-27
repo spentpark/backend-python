@@ -6,6 +6,9 @@ from app.main import app
 from app.database import Base, get_db
 import asyncio
 
+# Importamos tus modelos para el seed data (ajusta los nombres de las clases según tu app)
+from app.models import Platform, Game  # <-- Asegúrate de que las rutas sean correctas
+
 # 1. Configuración de Base de Datos de Prueba (SQLite en memoria)
 DATABASE_URL_TEST = "sqlite+aiosqlite:///:memory:"
 engine_test = create_async_engine(DATABASE_URL_TEST, echo=False)
@@ -18,13 +21,26 @@ async def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
-@pytest.fixture(scope="session", autouse=True)
+# Cambiamos el scope a "function" para evitar pérdidas de conexión en memoria entre tests
+@pytest.fixture(scope="function", autouse=True)
 async def setup_db():
     async with engine_test.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # --- INSERTAR DATOS SEMILLA (SEED DATA) ---
+    async with AsyncSessionTesting() as session:
+        # Añade aquí registros de ejemplo que tus pruebas necesitan
+        test_platform = Platform(id=1, description="PlayStation 5", url="https://ps5.com")
+        test_game = Game(id=1, title="Elden Ring", platform_id=1) # Ajusta según tus columnas reales
+        
+        session.add_all([test_platform, test_game])
+        await session.commit()
+
     yield
+    
     async with engine_test.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
 
 # --- PRUEBAS PARA PLATFORMS ---
 
@@ -36,7 +52,6 @@ async def test_get_platforms():
     assert len(response.json()) > 0
 
 # --- PRUEBAS PARA GAMES ---
-
 
 @pytest.mark.asyncio
 async def test_search_game_by_title():
