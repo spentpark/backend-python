@@ -7,19 +7,17 @@ from app.main import app
 from app.database import Base, get_db
 import asyncio
 
-# Cambia la importación y cómo las instancias en el setup_db:
-from app.models import platform, game, review
-
-# Y dentro de tu fixture setup_db() cámbialo a:
-test_platform = platform(id=1, description="PlayStation 5", url="https://ps5.com")
-test_game = game(id=1, title="Elden Ring", platform_id=1)
+# IMPORTACIÓN CORRECTA: Módulo específico -> Clase específica
+from app.models.platform import Platform
+from app.models.game import Game
+# (Si necesitas Review más adelante: from app.models.review import Review)
 
 # 1. Configuración de Base de Datos de Prueba (SQLite en memoria con StaticPool)
 DATABASE_URL_TEST = "sqlite+aiosqlite:///:memory:"
 engine_test = create_async_engine(
     DATABASE_URL_TEST, 
     echo=False,
-    poolclass=StaticPool  # Mantiene la misma conexión abierta para que no se pierdan las tablas
+    poolclass=StaticPool  # Mantiene la conexión para que no se mueran las tablas en memoria
 )
 AsyncSessionTesting = sessionmaker(engine_test, class_=AsyncSession, expire_on_commit=False)
 
@@ -79,6 +77,5 @@ async def test_search_game_by_title():
 @pytest.mark.asyncio
 async def test_get_reviews_not_found():
     async with AsyncClient(app=app, base_url="http://test") as ac:
-        # Buscamos reseñas de un juego que no existe (ID 999)
         response = await ac.get("/reviews/999")
     assert response.status_code == 404
