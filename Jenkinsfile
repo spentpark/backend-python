@@ -47,19 +47,18 @@ pipeline {
         }
 
         stage('Test & Sonar Analysis') {
-    steps {
-        script {
-            // Ejecución de pruebas
-            sh 'venv/bin/pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests fallaron pero continuamos"'
-            
-            // Fix de Sonar: Usar el bloque oficial en lugar de scripts sh propensos a errores de sintaxis
-            echo ==> Configurando Sonar-Scanner...
-            withSonarQubeEnv('SonarQube') { // Reemplaza 'SonarQube' por el nombre de tu server configurado en Jenkins
-                sh 'sonar-scanner'
+            steps {
+                script {
+                    // Ejecución de pruebas
+                    sh 'venv/bin/pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests fallaron pero continuamos"'
+                    
+                    // Fix de Sonar: Usar el bloque oficial en lugar de scripts sh propensos a errores de sintaxis
+                    withSonarQubeEnv('SonarQube') { // Reemplaza 'SonarQube' por el nombre de tu server configurado en Jenkins
+                        sh 'sonar-scanner'
+                    }
+                }
             }
         }
-    }
-}
         stage('Package (Wheel)') {
             steps {
                 sh '''
