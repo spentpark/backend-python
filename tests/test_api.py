@@ -10,6 +10,7 @@ import asyncio
 # IMPORTACIÓN CORRECTA: Módulo específico -> Clase específica
 from app.models.platform import Platform
 from app.models.game import Game
+from app.models.review import Review    
 # (Si necesitas Review más adelante: from app.models.review import Review)
 
 # 1. Configuración de Base de Datos de Prueba (SQLite en memoria con StaticPool)
@@ -39,7 +40,7 @@ async def setup_db():
     async with AsyncSessionTesting() as session:
         test_platform = Platform(id=1, description="PlayStation 5", url="https://ps5.com")
         test_game = Game(id=1, title="Elden Ring", platform_id=1)
-        
+        #test_review = Review(id=1, game_id=1, content="Great game!", rating=5)
         session.add_all([test_platform, test_game])
         await session.commit()
 
