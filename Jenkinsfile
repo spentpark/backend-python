@@ -52,37 +52,33 @@ pipeline {
                     sh '''
                         echo "==> Activando entorno virtual y ejecutando tests..."
                         . venv/bin/activate
-                        
-                        # Forzamos httpx a una versión anterior para que no rompa tu sintaxis con 'app='
+
                         pip install pytest pytest-cov "httpx<=0.26.0" aiosqlite pytest-asyncio
-                        
-                        # Ejecutamos pytest ignorando warnings menores
+
                         pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
                     '''
-                    
+
                     sh '''
                         echo "==> Configurando Sonar-Scanner..."
-                        if ! command -v sonar-scanner &> /dev/null; then
-                            echo "Descargando sonar-scanner de forma segura..."
-                            
-                            # Usamos comillas simples alrededor del User-Agent para que Jenkins no se confunda con los espacios
-                            sh "curl -fL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip -o sonar-scanner.zip"
-                            
-                            echo "Descomprimiendo usando Python..."
-                            sh "python3 -c \"import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')\""
+                        SONAR_DIR="sonar-scanner-6.0.0.4432-linux-x64"
+
+                        if [ ! -f "${SONAR_DIR}/bin/sonar-scanner" ]; then
+                            echo "Descargando sonar-scanner..."
+                            curl -fL "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip" -o sonar-scanner.zip
+                            python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')"
                             rm sonar-scanner.zip
                         fi
-                        
-                        export PATH=$PATH:$(pwd)/sonar-scanner-6.0.0.4432-linux-x64/bin
+
+                        export PATH=$PATH:$(pwd)/${SONAR_DIR}/bin
 
                         echo "==> Ejecutando análisis en SonarQube..."
                         sonar-scanner \
-                          -Dsonar.projectKey=backend-python \
-                          -Dsonar.sources=app \
-                          -Dsonar.tests=tests \
-                          -Dsonar.python.coverage.reportPaths=coverage.xml \
-                          -Dsonar.host.url=${SONAR_HOST_URL} \
-                          -Dsonar.token=${SONAR_TOKEN}
+                        -Dsonar.projectKey=backend-python \
+                        -Dsonar.sources=app \
+                        -Dsonar.tests=tests \
+                        -Dsonar.python.coverage.reportPaths=coverage.xml \
+                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                        -Dsonar.token=${SONAR_TOKEN}
                     '''
                 }
             }

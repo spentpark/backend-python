@@ -31,6 +31,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 # Fixture con scope "function" para aislar y limpiar la base de datos en cada test
 @pytest.fixture(scope="function", autouse=True)
+@pytest.mark.asyncio  # <-- add this
 async def setup_db():
     # Crear las tablas en la base de datos de prueba
     async with engine_test.begin() as conn:
