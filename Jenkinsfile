@@ -11,7 +11,7 @@ pipeline {
 
         // Sonar Config
         SONAR_HOST_URL = "http://172.17.0.1:9000"
-        SONAR_TOKEN    = "squ_d27dacd45a6c18772d7e941fd44e1617cf5c4c38"
+        SONAR_TOKEN    = "squ_d235b7481cb93a1dc142c52f5a79fe0325e1ee31"
 
         APP_VERSION   = ""
         ARTIFACT_FILE = ""
