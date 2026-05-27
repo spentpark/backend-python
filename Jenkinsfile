@@ -50,22 +50,27 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        # Ejecutar tests y generar reporte de cobertura
+                        echo "==> Activando entorno virtual y ejecutando tests..."
+                        . venv/bin/activate
+                        # Asegurar que pytest-cov esté instalado para el reporte
+                        pip install pytest pytest-cov
+                        
                         pytest --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
                     '''
                     
-                    // Si no tienes el sonar-scanner instalado en la imagen, 
-                    // lo ideal es usar el cliente de python o descargar el binario.
-                    // Aquí asumimos que usas la imagen oficial de sonar-scanner o lo descargas:
                     sh '''
-                        # Descarga rápida del sonar-scanner si no existe
+                        echo "==> Configurando Sonar-Scanner..."
+                        # Si no tienes el sonar-scanner instalado, lo descargamos usando curl y tar
                         if ! command -v sonar-scanner &> /dev/null; then
-                            apt-get update && apt-get install -y wget unzip
-                            wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-                            unzip sonar-scanner-cli-5.0.1.3006-linux.zip
-                            export PATH=$PATH:$(pwd)/sonar-scanner-5.0.1.3006-linux/bin
+                            echo "Descargando sonar-scanner de forma portátil..."
+                            # Descargamos la versión .tar.gz (así usamos tar en vez de unzip)
+                            curl -sSLo sonar-scanner.tar.gz https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux-x64.tar.gz
+                            tar -xzf sonar-scanner.tar.gz
+                            rm sonar-scanner.tar.gz
+                            export PATH=$PATH:$(pwd)/sonar-scanner-5.0.1.3006-linux-x64/bin
                         fi
 
+                        echo "==> Ejecutando análisis en SonarQube..."
                         sonar-scanner \
                           -Dsonar.projectKey=backend-python \
                           -Dsonar.sources=app \
