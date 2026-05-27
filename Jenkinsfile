@@ -53,11 +53,10 @@ pipeline {
                         echo "==> Activando entorno virtual y ejecutando tests..."
                         . venv/bin/activate
                         
-                        # Instalamos las dependencias necesarias, sumando pytest-asyncio para soportar tests asíncronos
-                        pip install pytest pytest-cov httpx aiosqlite pytest-asyncio
+                        # Forzamos httpx a una versión anterior para que no rompa tu sintaxis con 'app='
+                        pip install pytest pytest-cov "httpx<=0.26.0" aiosqlite pytest-asyncio
                         
-                        # Ejecutamos pytest diciéndole que ignore los warnings de deprecación (-W ignore) 
-                        # para evitar que la versión estricta de pytest detenga el pipeline.
+                        # Ejecutamos pytest ignorando warnings menores
                         pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
                     '''
                     
@@ -65,14 +64,15 @@ pipeline {
                         echo "==> Configurando Sonar-Scanner..."
                         if ! command -v sonar-scanner &> /dev/null; then
                             echo "Descargando sonar-scanner de forma segura..."
-                            curl -A "Mozilla/5.0" -sSLo sonar-scanner.zip -L "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip"
+                            
+                            # Usamos comillas simples alrededor del User-Agent para que Jenkins no se confunda con los espacios
+                            curl -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -sSLo sonar-scanner.zip -L "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.0.0.4432-linux-x64.zip"
                             
                             echo "Descomprimiendo usando Python..."
                             python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('.')"
                             rm sonar-scanner.zip
                         fi
                         
-                        # Aseguramos que el binario descargado esté disponible en el PATH de este bloque de ejecución
                         export PATH=$PATH:$(pwd)/sonar-scanner-6.0.0.4432-linux-x64/bin
 
                         echo "==> Ejecutando análisis en SonarQube..."
