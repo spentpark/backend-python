@@ -1,10 +1,30 @@
+# Control de versiones y metadatos
+.git/
+.gitignore
+.dockerignore
+
+# Entornos virtuales y cachés de Python
 venv/
-.pytest_cache/
 __pycache__/
-tests/
-coverage.xml
-.env.local
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
+
+# Artefactos de build y cobertura
 dist/
 build/
-.git/
+coverage.xml
+
+# Pruebas y configuración de CI (no se usan dentro de la imagen)
+tests/
+Jenkinsfile
+sonar-project.properties
+pytest.ini
+
+# Documentación
+*.md
+
+# Variables de entorno locales (el .env se copia explícitamente en el Dockerfile)
+.env.local

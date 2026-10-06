@@ -1,15 +1,17 @@
-from pydantic import BaseModel
-from typing import Optional
+"""Contratos Pydantic de entrada/salida para la entidad Review."""
+from pydantic import BaseModel, ConfigDict
+
 
 class ReviewBase(BaseModel):
-    name: Optional[str] = None
-    date: Optional[str] = None
+    name: str | None = None
+    date: str | None = None
     review: str
-    score: Optional[str] = None
+    score: str | None = None
     source: str
-    id_game: Optional[int] = None
+    id_game: int | None = None
+
 
 class ReviewResponse(ReviewBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    class Config:
-        from_attributes = True

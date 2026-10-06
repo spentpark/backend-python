@@ -53,7 +53,7 @@ pipeline {
                 echo "==> Activando entorno virtual y ejecutando tests..."
                 . venv/bin/activate
 
-                pip install pytest pytest-cov "httpx<=0.26.0" aiosqlite pytest-asyncio
+                pip install pytest pytest-cov "httpx>=0.28.1" aiosqlite pytest-asyncio
 
                 pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
             '''

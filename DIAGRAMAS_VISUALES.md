@@ -390,23 +390,23 @@ graph TB
 
 ```mermaid
 graph TD
-    A["python:3.13-slim"] --> B["STAGE 1: BUILDER"]
+    A["python:3.14-slim"] --> B["STAGE 1: BUILDER"]
     
-    B --> C["Instalar<br/>gcc, python3-dev<br/>libmariadb-dev"]
+    B --> C["Instalar<br/>gcc, python3-dev"]
     C --> D["COPY requirements.txt"]
     D --> E["pip install --prefix<br/>en /install"]
     E --> F["/install/<br/>site-packages"]
     
     F --> G["COPY /install<br/>al STAGE 2"]
     
-    H["python:3.13-slim"] --> I["STAGE 2: FINAL"]
+    H["python:3.14-slim"] --> I["STAGE 2: FINAL"]
     
-    I --> J["Instalar runtime<br/>libmariadb3"]
-    J --> K["COPY /install<br/>from builder"]
-    K --> L["COPY app/"]
-    L --> M["COPY .env"]
-    M --> N["adduser appuser<br/>chown /app"]
-    N --> O["EXPOSE 8000"]
+    I --> J["COPY /install<br/>from builder"]
+    J --> K["adduser appuser"]
+    K --> L["COPY --chown app/<br/>y .env"]
+    L --> M["USER appuser"]
+    M --> N["EXPOSE 8000"]
+    N --> O["HEALTHCHECK<br/>GET /"]
     O --> P["CMD: uvicorn<br/>app.main:app<br/>host=0.0.0.0<br/>port=8000"]
     
     P --> Q["🐳 Docker Image<br/>Final"]
@@ -449,7 +449,7 @@ graph LR
     
     subgraph Container["🐳 Container"]
         K["Docker Build<br/>Multi-stage"]
-        L["Python:3.13-slim<br/>+ dependencies"]
+        L["Python:3.14-slim<br/>+ dependencies"]
     end
     
     subgraph Deploy["🚀 Deployment"]
