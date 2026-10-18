@@ -26,6 +26,9 @@ ControllerDep = Annotated[PlatformController, Depends(get_controller)]
 
 
 @router.get("/", response_model=PaginatedPlatformResponse)
+# Alias sin barra final: evita el 307 que FastAPI emite para `/platforms`,
+# que es la ruta que invoca el SPA.
+@router.get("", response_model=PaginatedPlatformResponse, include_in_schema=False)
 async def get_all(
     ctrl: ControllerDep,
     page: Annotated[int, Query(ge=0)] = 1,

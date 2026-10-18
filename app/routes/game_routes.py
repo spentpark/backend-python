@@ -37,6 +37,9 @@ async def search(
 
 
 @router.get("/", response_model=PaginatedGameSummaryResponse)
+# Alias sin barra final: evita el 307 que FastAPI emite para `/games`, que el SPA
+# (que llama a `/games`) tendría que seguir en cada petición.
+@router.get("", response_model=PaginatedGameSummaryResponse, include_in_schema=False)
 async def get_all(
     ctrl: ControllerDep,
     platform: str | None = None,
