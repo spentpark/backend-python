@@ -46,49 +46,49 @@ pipeline {
             }
         }
 
- stage('Test & Sonar Analysis') {
-    steps {
-        script {
-            sh '''
-                echo "==> Activando entorno virtual y ejecutando tests..."
-                . venv/bin/activate
+        stage('Test & Sonar Analysis') {
+            steps {
+                script {
+                    sh '''
+                        echo "==> Activando entorno virtual y ejecutando tests..."
+                        . venv/bin/activate
 
-                pip install pytest pytest-cov "httpx>=0.28.1" aiosqlite pytest-asyncio
+                        pip install pytest pytest-cov "httpx>=0.28.1" aiosqlite pytest-asyncio
 
-                pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
-            '''
+                        pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
+                    '''
 
-            sh '''
-                echo "==> Verificando sonar-scanner..."
-                SONAR_DIR="$(pwd)/sonar-scanner"
+                    sh '''
+                        echo "==> Verificando sonar-scanner..."
+                        SONAR_DIR="$(pwd)/sonar-scanner"
 
-                if [ ! -f "${SONAR_DIR}/bin/sonar-scanner" ]; then
-                    echo "Descargando sonar-scanner..."
-                    curl -fL "https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/6.0.0.4432/sonar-scanner-cli-6.0.0.4432.zip" \
-                         -o sonar-scanner.zip
-                    python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('sonar-scanner-extracted')"
-                    rm sonar-scanner.zip
-                    mv sonar-scanner-extracted/sonar-scanner-* "${SONAR_DIR}"
-                fi
+                        if [ ! -f "${SONAR_DIR}/bin/sonar-scanner" ]; then
+                            echo "Descargando sonar-scanner..."
+                            curl -fL "https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/6.0.0.4432/sonar-scanner-cli-6.0.0.4432.zip" \
+                                -o sonar-scanner.zip
+                            python3 -c "import zipfile; zipfile.ZipFile('sonar-scanner.zip').extractall('sonar-scanner-extracted')"
+                            rm sonar-scanner.zip
+                            mv sonar-scanner-extracted/sonar-scanner-* "${SONAR_DIR}"
+                        fi
 
-                echo "==> Aplicando permisos..."
-                chmod -R +x "${SONAR_DIR}/bin/"
-                chmod -R +x "${SONAR_DIR}/jre/bin/" 2>/dev/null || true
+                        echo "==> Aplicando permisos..."
+                        chmod -R +x "${SONAR_DIR}/bin/"
+                        chmod -R +x "${SONAR_DIR}/jre/bin/" 2>/dev/null || true
 
-                export PATH=$PATH:${SONAR_DIR}/bin
+                        export PATH=$PATH:${SONAR_DIR}/bin
 
-                echo "==> Ejecutando análisis en SonarQube..."
-                sonar-scanner \
-                  -Dsonar.projectKey=backend-python \
-                  -Dsonar.sources=app \
-                  -Dsonar.tests=tests \
-                  -Dsonar.python.coverage.reportPaths=coverage.xml \
-                  -Dsonar.host.url=${SONAR_HOST_URL} \
-                  -Dsonar.token=${SONAR_TOKEN}
-            '''
+                        echo "==> Ejecutando análisis en SonarQube..."
+                        sonar-scanner \
+                        -Dsonar.projectKey=backend-python \
+                        -Dsonar.sources=app \
+                        -Dsonar.tests=tests \
+                        -Dsonar.python.coverage.reportPaths=coverage.xml \
+                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                        -Dsonar.token=${SONAR_TOKEN}
+                    '''
+                }
+            }
         }
-    }
-}
 
         stage('Package (Wheel)') {
             steps {
@@ -101,6 +101,7 @@ pipeline {
             }
         }
 
+        /*
         stage('Publish to Nexus') {
             steps {
                 withCredentials([usernamePassword(credentialsId: "${NEXUS_CREDENTIAL_ID}", usernameVariable: 'USER', passwordVariable: 'PASS')]) {
@@ -117,6 +118,7 @@ pipeline {
                 }
             }
         }
+        */
     }
 
     post {

@@ -131,7 +131,11 @@ backend-python/
 - `POST /platforms/`, `PUT /platforms/{id}`, `DELETE /platforms/{id}`.
 
 ### Reviews (`/reviews`)
-- `GET /reviews/{id}` → reseñas del juego con ese `id` (404 si no hay reseñas).
+- `GET /reviews/{id}` → reseñas del juego con ese `id`, **paginadas**; query params `page`
+  (default 1) y `limit` (default 10). Respuesta `PaginatedReviewResponse` (`data` +
+  `pagination`) y orden por `id`, para que la paginación sea estable entre páginas.
+  Devuelve 404 solo si el juego no tiene **ninguna** reseña; una página fuera de rango
+  responde 200 con `data` vacía y el total real en `pagination`.
 
 > **Paginación:** estructura `{ "data": [...], "pagination": { "currentPage", "perPage",
 > "totalRecords", "totalPages" } }`. `totalPages = ceil(total / limit)`. Los query params

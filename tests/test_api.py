@@ -52,7 +52,27 @@ def setup_db():
                 description="An open world RPG",
                 Platform="PlayStation 5",
             )
-            session.add_all([test_platform, test_game])
+            # Segundo juego con reseñas: el juego 1 se queda sin ninguna para
+            # poder seguir comprobando el 404.
+            reviewed_game = Game(
+                id=2,
+                title="Hades",
+                description="A roguelike dungeon crawler",
+                Platform="PC",
+            )
+            reviews = [
+                Review(
+                    id=index,
+                    name=f"Author {index}",
+                    date="2024-01-01",
+                    review=f"Review {index}",
+                    score="8",
+                    source="Metacritic",
+                    id_game=2,
+                )
+                for index in range(1, 16)
+            ]
+            session.add_all([test_platform, test_game, reviewed_game, *reviews])
             await session.commit()
 
     async def _drop():
@@ -125,6 +145,52 @@ async def test_get_reviews_not_found():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.get("/reviews/1")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_paginadas_por_defecto():
+    """Sin parámetros se devuelven las 10 reseñas de la primera página."""
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/reviews/2")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pagination"] == {
+        "currentPage": 1,
+        "perPage": 10,
+        "totalRecords": 15,
+        "totalPages": 2,
+    }
+    assert [review["id"] for review in body["data"]] == list(range(1, 11))
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_segunda_pagina():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/reviews/2?page=2&limit=10")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pagination"]["currentPage"] == 2
+    assert body["pagination"]["totalPages"] == 2
+    assert [review["id"] for review in body["data"]] == [11, 12, 13, 14, 15]
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_pagina_fuera_de_rango():
+    """Una página sin resultados responde 200 con `data` vacía."""
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/reviews/2?page=9&limit=10")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == []
+    assert body["pagination"]["totalRecords"] == 15
+    assert body["pagination"]["totalPages"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_limit_invalido_devuelve_422():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/reviews/2?limit=0")
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
