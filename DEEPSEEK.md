@@ -260,10 +260,8 @@ cobertura en `coverage.xml`, exclusiones de `venv/`, `dist/`, `build/`, etc.
 ## 12. Áreas no implementadas / deuda técnica conocida
 
 - **Sin autenticación/autorización** (endpoints públicos, sin JWT ni roles).
-- **Inconsistencias controller↔route:** algunas rutas invocan métodos que no existen en el
-  controller correspondiente (`GameController.create_game/update_game/delete_game`,
-  `PlatformController.create_platform/update_platform/delete_platform`). Verifica y completa
-  estos métodos antes de depender de esos endpoints.
+- **CRUD completo de `games` y `platform`:** `POST`/`PUT`/`DELETE` responden 404 con
+  `detail` en español cuando el id no existe, y `{"deleted": true}` al borrar.
 - **Reviews** solo implementa lectura (`GET /reviews/{id}`); no hay create/update/delete.
 - **Sin `relationship` ORM** entre entidades.
 - **Manejo de errores y logging** no centralizados.
