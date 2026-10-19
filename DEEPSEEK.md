@@ -186,10 +186,16 @@ Servidor en `http://localhost:8000` — Swagger en `http://localhost:8000/docs`.
 
 ```bash
 pip install pytest pytest-cov httpx aiosqlite pytest-asyncio
-pytest -W ignore --cov=app --cov-report=xml:coverage.xml
+pytest -W ignore --cov=app --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 ```
 
-- `pytest.ini` define `asyncio_mode = auto`.
+- `pytest.ini` define `asyncio_mode = auto` y
+  `addopts = --junitxml=reports/junit.xml` con `junit_family = xunit2`, por lo que cada
+  ejecución genera el reporte de resultados en `reports/junit.xml`. El directorio `reports/`
+  se mantiene versionado mediante `reports/.gitkeep`.
+- Reportes generados: `reports/junit.xml` (resultados de los tests, consumido por Jenkins y
+  SonarQube), `coverage.xml` (cobertura para SonarQube) y `htmlcov/index.html` (cobertura
+  navegable en local).
 - Las pruebas usan **SQLite en memoria** (`sqlite+aiosqlite:///:memory:`) con `StaticPool` y
   sobreescriben la dependencia `get_db` mediante `app.dependency_overrides`.
 - El fixture `setup_db` crea y destruye las tablas por prueba.
@@ -226,13 +232,20 @@ Comando de arranque: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
 
 1. **Clean Install:** crea venv (`--without-pip`), instala pip vía bootstrap y las dependencias.
 2. **Test & Sonar Analysis:** instala `pytest`, `pytest-cov`, `httpx>=0.28.1`, `aiosqlite`,
-   `pytest-asyncio`; ejecuta pytest con cobertura (`coverage.xml`) y lanza `sonar-scanner`
+   `pytest-asyncio`; ejecuta pytest con cobertura XML (`coverage.xml`), cobertura HTML
+   (`htmlcov/`) y reporte JUnit de resultados (`reports/junit.xml`); después lanza
+   `sonar-scanner` con `sonar.python.coverage.reportPaths` y `sonar.python.xunit.reportPath`
    contra SonarQube (`http://172.17.0.1:9000`).
 3. **Package (Wheel):** `python -m build` (versión `1.0.${BUILD_NUMBER}`).
 4. **Publish to Nexus:** sube el wheel con `twine` al repositorio PyPI de Nexus.
 
+El bloque `post { always }` publica `reports/junit.xml` con el step `junit`
+(`allowEmptyResults: true`) para que los resultados de los tests aparezcan en la vista del
+build, y archiva `coverage.xml`, `reports/junit.xml` y `htmlcov/**` como artefactos.
+
 `sonar-project.properties`: `sonar.sources=app`, `sonar.tests=tests`, versión Python 3.14,
-cobertura en `coverage.xml`, exclusiones de `venv/`, `dist/`, `build/`, etc.
+cobertura en `coverage.xml`, resultados de tests en `reports/junit.xml`, exclusiones de
+`venv/`, `dist/`, `build/`, etc.
 
 ## 11. Convenciones de desarrollo
 

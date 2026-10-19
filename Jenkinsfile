@@ -26,7 +26,7 @@ pipeline {
                     python3 --version
                     
                     echo "Cleaning workspace..."
-                    rm -rf venv build dist *.egg-info .pytest_cache coverage.xml htmlcov
+                    rm -rf venv build dist *.egg-info .pytest_cache coverage.xml htmlcov reports
                     
                     echo "Creating virtual environment (without pip)..."
                     # El flag --without-pip evita que falle por la falta de ensurepip
@@ -55,7 +55,15 @@ pipeline {
 
                         pip install pytest pytest-cov "httpx>=0.28.1" aiosqlite pytest-asyncio
 
-                        pytest -W ignore --cov=app --cov-report=xml:coverage.xml || echo "Tests failed but continuing for analysis"
+                        # Genera el reporte JUnit XML que Jenkins publica en la vista del build
+                        mkdir -p reports
+
+                        pytest -W ignore \
+                            --cov=app \
+                            --cov-report=xml:coverage.xml \
+                            --cov-report=html:htmlcov \
+                            --junitxml=reports/junit.xml \
+                            || echo "Tests failed but continuing for analysis"
                     '''
 
                     sh '''
@@ -83,6 +91,7 @@ pipeline {
                         -Dsonar.sources=app \
                         -Dsonar.tests=tests \
                         -Dsonar.python.coverage.reportPaths=coverage.xml \
+                        -Dsonar.python.xunit.reportPath=reports/junit.xml \
                         -Dsonar.host.url=${SONAR_HOST_URL} \
                         -Dsonar.token=${SONAR_TOKEN}
                     '''
@@ -123,6 +132,10 @@ pipeline {
 
     post {
         always {
+            // Publica el reporte de tests unitarios en la vista del build (JUnit)
+            junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+            archiveArtifacts artifacts: 'coverage.xml,reports/junit.xml,htmlcov/**', allowEmptyArchive: true
+
             // En Docker no hace falta borrar el venv porque el contenedor se destruye
             cleanWs()
             echo "Pipeline finished"
