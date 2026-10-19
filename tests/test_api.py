@@ -194,6 +194,172 @@ async def test_get_reviews_limit_invalido_devuelve_422():
 
 
 @pytest.mark.asyncio
+async def test_root_y_favicon():
+    """La raíz informa de la documentación y el favicon responde 204."""
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        root = await ac.get("/")
+        favicon = await ac.get("/favicon.ico")
+    assert root.status_code == 200
+    assert root.json()["docs"] == "/docs"
+    assert favicon.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_get_db_entrega_y_cierra_la_sesion():
+    """`get_db` produce una sesión y la cierra al agotar el generador."""
+    generador = get_db()
+    sesion = await generador.__anext__()
+    assert isinstance(sesion, AsyncSession)
+    await generador.aclose()
+
+
+# --- Juegos: lectura por id ---
+
+
+@pytest.mark.asyncio
+async def test_get_game_by_id():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/1")
+    assert response.status_code == 200
+    assert response.json()["title"] == "Elden Ring"
+
+
+@pytest.mark.asyncio
+async def test_get_game_by_id_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/9999")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Juego no encontrado"
+
+
+# --- Juegos: alta, actualización y borrado ---
+
+
+@pytest.mark.asyncio
+async def test_create_game():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/games/",
+            json={"title": "Hollow Knight", "description": "Metroidvania"},
+        )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] == 3
+    assert body["title"] == "Hollow Knight"
+
+
+@pytest.mark.asyncio
+async def test_update_game():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.put(
+            "/games/1",
+            json={"title": "Elden Ring Nightreign", "description": "DLC independiente"},
+        )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Elden Ring Nightreign"
+
+
+@pytest.mark.asyncio
+async def test_update_game_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.put(
+            "/games/9999",
+            json={"title": "Nada", "description": "No existe"},
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_game():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/games/1")
+        despues = await ac.get("/games/1")
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True}
+    assert despues.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_game_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/games/9999")
+    assert response.status_code == 404
+
+
+# --- Plataformas: lectura por id ---
+
+
+@pytest.mark.asyncio
+async def test_get_platform_by_id():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/platforms/1")
+    assert response.status_code == 200
+    assert response.json()["description"] == "PlayStation 5"
+
+
+@pytest.mark.asyncio
+async def test_get_platform_by_id_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/platforms/9999")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Plataforma no encontrada"
+
+
+# --- Plataformas: alta, actualización y borrado ---
+
+
+@pytest.mark.asyncio
+async def test_create_platform():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/platforms/",
+            json={"description": "Nintendo Switch", "url": "https://switch.com"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == 2
+    assert body["description"] == "Nintendo Switch"
+
+
+@pytest.mark.asyncio
+async def test_update_platform():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.put(
+            "/platforms/1",
+            json={"description": "PlayStation 5 Pro", "url": "https://ps5.pro"},
+        )
+    assert response.status_code == 200
+    assert response.json()["description"] == "PlayStation 5 Pro"
+
+
+@pytest.mark.asyncio
+async def test_update_platform_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.put(
+            "/platforms/9999",
+            json={"description": "Nada", "url": None},
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_platform():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/platforms/1")
+        despues = await ac.get("/platforms/1")
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True}
+    assert despues.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_platform_inexistente():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.delete("/platforms/9999")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_get_games_by_platform_campos_resumidos():
     """El listado /games/ expone únicamente id, title y platform."""
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

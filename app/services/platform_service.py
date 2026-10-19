@@ -21,3 +21,19 @@ class PlatformService:
 
     async def get_by_id(self, id: int) -> Platform | None:
         return await self.repository.find_by_id(id)
+
+    async def create(self, data: dict[str, Any]) -> Platform:
+        """Crea una plataforma y devuelve la entidad persistida."""
+        return await self.repository.create(data)
+
+    async def update(self, id: int, data: dict[str, Any]) -> Platform | None:
+        """Actualiza una plataforma; devuelve None si el id no existe."""
+        result = await self.repository.update(id, data)
+        if result.rowcount == 0:
+            return None
+        return await self.repository.find_by_id(id)
+
+    async def delete(self, id: int) -> bool:
+        """Elimina una plataforma; devuelve False si el id no existía."""
+        result = await self.repository.delete(id)
+        return result.rowcount > 0

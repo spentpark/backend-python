@@ -5,12 +5,12 @@ pipeline {
         // Nexus Config
         NEXUS_VERSION       = "nexus3"
         NEXUS_PROTOCOL      = "http"
-        NEXUS_URL           = "172.17.0.1:8081"
+        NEXUS_URL           = "192.168.1.82:8081"
         NEXUS_REPOSITORY    = "python-nexus-repo" // Asegúrate de crear un repo tipo 'pypi' en Nexus
         NEXUS_CREDENTIAL_ID = "nexus"
 
         // Sonar Config
-        SONAR_HOST_URL = "http://172.17.0.1:9000"
+        SONAR_HOST_URL = "http://192.168.1.82:9000"
         SONAR_TOKEN    = credentials('sonar-token')  //"squ_d235b7481cb93a1dc142c52f5a79fe0325e1ee31"
 
         APP_VERSION   = ""

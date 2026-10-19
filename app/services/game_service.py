@@ -26,3 +26,19 @@ class GameService:
         """Filtra juegos por plataforma con paginación."""
         rows, total = await self.repository.find_by_platform_paginated(platform, page, limit)
         return build_paginated_response(rows, total, page, limit)
+
+    async def create(self, data: dict[str, Any]) -> Game:
+        """Crea un juego y devuelve la entidad persistida."""
+        return await self.repository.create(data)
+
+    async def update(self, id: int, data: dict[str, Any]) -> Game | None:
+        """Actualiza un juego; devuelve None si el id no existe."""
+        result = await self.repository.update(id, data)
+        if result.rowcount == 0:
+            return None
+        return await self.repository.find_by_id(id)
+
+    async def delete(self, id: int) -> bool:
+        """Elimina un juego; devuelve False si el id no existía."""
+        result = await self.repository.delete(id)
+        return result.rowcount > 0
