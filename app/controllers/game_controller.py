@@ -30,6 +30,13 @@ class GameController:
     async def filter_by_platform(self, platform: str, page: int, limit: int) -> dict[str, Any]:
         return await self.service.get_by_platform(platform, page, limit)
 
+    async def get_random_game(self) -> Game:
+        """Devuelve un juego al azar con tráiler; 404 si la colección no tiene ninguno."""
+        game = await self.service.get_random_with_trailer()
+        if not game:
+            raise HTTPException(status_code=404, detail="No hay juegos con tráiler disponible")
+        return game
+
     async def create_game(self, data: GameCreate) -> Game:
         """Crea un juego a partir del contrato de entrada."""
         return await self.service.create(data.model_dump())

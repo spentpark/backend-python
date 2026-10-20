@@ -119,6 +119,13 @@ backend-python/
   El repositorio selecciona únicamente esas columnas (no carga las columnas `Text` pesadas).
 - `GET /games/search?title=...&page=&limit=` → búsqueda por prefijo de título (400 si falta `title`).
 - `GET /games/{id}` → juego por ID (404 si no existe).
+- `GET /games/random` → juego al azar con tráiler para la pantalla de inicio del SPA.
+  Respuesta `RandomGameResponse` con `id`, `title`, `platform`, `publisher`, `releasedate`,
+  `players`, `genre`, `imageOriginal` y `youtubeTrailer` (camelCase). Solo considera juegos
+  con `youtube_Trailer` no nulo ni vacío; si no hay ninguno responde 404 con
+  `"No hay juegos con tráiler disponible"`. El repositorio cuenta primero y elige un
+  `OFFSET` aleatorio en Python (portable entre MySQL y SQLite). La ruta se declara **antes**
+  de `/games/{id}` o FastAPI intentaría parsear `"random"` como entero.
 - `POST /games/` → crea juego (`GameCreate`, responde 201).
 - `PUT /games/{id}` → actualiza juego.
 - `DELETE /games/{id}` → elimina juego.

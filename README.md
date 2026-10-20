@@ -30,6 +30,10 @@ http://localhost:8000/games/
 
 {"data":[{"id":16489,"title":"The Witcher 3: Wild Hunt","platform":"Sony Playstation 4"},{"id":17111,"title":"The Witness","platform":"Sony Playstation 4"}],"pagination":{"currentPage":0,"perPage":100,"totalRecords":2,"totalPages":1}}
 
+http://localhost:8000/games/random
+
+{"id":16489,"title":"The Witcher 3: Wild Hunt","platform":"Sony Playstation 4","publisher":"CD Projekt","releasedate":"2015-05-19","players":"1","genre":"RPG","imageOriginal":"https://images.example.com/witcher3.jpg","youtubeTrailer":"https://www.youtube.com/embed/c0i88t0Kacs"}
+
 
 http://localhost:8000/reviews/123
 

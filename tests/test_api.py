@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -51,6 +52,12 @@ def setup_db():
                 title="Elden Ring",
                 description="An open world RPG",
                 Platform="PlayStation 5",
+                Publisher="FromSoftware",
+                releasedate="2022-02-25",
+                players="1",
+                genre="RPG",
+                image_Original="https://img.test/elden-ring.jpg",
+                youtube_Trailer="https://www.youtube.com/embed/elden-ring",
             )
             # Segundo juego con reseñas: el juego 1 se queda sin ninguna para
             # poder seguir comprobando el 404.
@@ -376,3 +383,50 @@ async def test_get_games_by_platform_campos_resumidos():
         "totalRecords": 1,
         "totalPages": 1,
     }
+
+
+# --- Juegos: juego al azar para la pantalla de inicio ---
+
+
+@pytest.mark.asyncio
+async def test_get_random_game_con_trailer():
+    """`/games/random` devuelve el juego con tráiler y los campos de la portada."""
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/random")
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "title": "Elden Ring",
+        "platform": "PlayStation 5",
+        "publisher": "FromSoftware",
+        "releasedate": "2022-02-25",
+        "players": "1",
+        "genre": "RPG",
+        "imageOriginal": "https://img.test/elden-ring.jpg",
+        "youtubeTrailer": "https://www.youtube.com/embed/elden-ring",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_random_game_sin_trailers():
+    """Sin juegos con tráiler responde 404 con un mensaje en español."""
+    async with AsyncSessionTesting() as session:
+        await session.execute(update(Game).values(youtube_Trailer=None))
+        await session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/random")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No hay juegos con tráiler disponible"
+
+
+@pytest.mark.asyncio
+async def test_get_random_game_ignora_trailers_vacios():
+    """Una URL de tráiler vacía no cuenta como tráiler disponible."""
+    async with AsyncSessionTesting() as session:
+        await session.execute(update(Game).values(youtube_Trailer=""))
+        await session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/random")
+    assert response.status_code == 404

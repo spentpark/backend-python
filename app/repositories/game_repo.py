@@ -1,4 +1,5 @@
 """Acceso a datos de la entidad Game (SQLAlchemy Async)."""
+import random
 from collections.abc import Sequence
 
 from sqlalchemy import delete, func, select, update
@@ -6,6 +7,11 @@ from sqlalchemy.engine import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.game import Game
+
+
+def _has_trailer():
+    """Condición reutilizable: el juego tiene una URL de tráiler no vacía."""
+    return Game.youtube_Trailer.is_not(None) & (Game.youtube_Trailer != "")
 
 
 class GameRepository:
@@ -81,3 +87,28 @@ class GameRepository:
         total = (await self.db.execute(total_query)).scalar_one()
 
         return rows, total
+
+    async def find_random_with_trailer(self) -> Game | None:
+        """Devuelve un juego al azar que tenga tráiler, o None si no hay ninguno.
+
+        Se cuenta primero y se elige un `OFFSET` aleatorio en Python en lugar de
+        usar `ORDER BY RAND()`: funciona igual en MySQL y en SQLite (tests) y
+        evita ordenar la tabla completa.
+        """
+        condition = _has_trailer()
+
+        total = (
+            await self.db.execute(select(func.count()).select_from(Game).where(condition))
+        ).scalar_one()
+
+        if total == 0:
+            return None
+
+        result = await self.db.execute(
+            select(Game)
+            .where(condition)
+            .order_by(Game.id)
+            .offset(random.randrange(total))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

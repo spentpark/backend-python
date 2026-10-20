@@ -12,6 +12,7 @@ from app.schemas.game_schema import (
     GameResponse,
     PaginatedGameResponse,
     PaginatedGameSummaryResponse,
+    RandomGameResponse,
 )
 from app.services.game_service import GameService
 
@@ -47,6 +48,14 @@ async def get_all(
     limit: Annotated[int, Query(ge=1)] = 10,
 ):
     return await ctrl.filter_by_platform(platform, page, limit)
+
+
+# Debe declararse antes de `/{id}`: si no, FastAPI intentaría convertir
+# "random" en un entero y el endpoint respondería 422.
+@router.get("/random", response_model=RandomGameResponse)
+async def get_random(ctrl: ControllerDep):
+    """Devuelve un juego al azar que tenga tráiler (pantalla de inicio del SPA)."""
+    return await ctrl.get_random_game()
 
 
 @router.get("/{id}", response_model=GameResponse)

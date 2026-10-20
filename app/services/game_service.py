@@ -27,6 +27,10 @@ class GameService:
         rows, total = await self.repository.find_by_platform_paginated(platform, page, limit)
         return build_paginated_response(rows, total, page, limit)
 
+    async def get_random_with_trailer(self) -> Game | None:
+        """Devuelve un juego al azar que tenga tráiler, o None si no hay ninguno."""
+        return await self.repository.find_random_with_trailer()
+
     async def create(self, data: dict[str, Any]) -> Game:
         """Crea un juego y devuelve la entidad persistida."""
         return await self.repository.create(data)

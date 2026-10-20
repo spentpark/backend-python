@@ -71,3 +71,23 @@ class GameSummary(BaseModel):
 class PaginatedGameSummaryResponse(BaseModel):
     data: list[GameSummary]
     pagination: PaginationInfo
+
+
+class RandomGameResponse(BaseModel):
+    """Juego al azar con los datos que muestra la pantalla de inicio.
+
+    Los nombres de los campos se normalizan a camelCase para el SPA, aunque el
+    modelo ORM use `image_Original` y `youtube_Trailer`.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    platform: str | None = Field(None, validation_alias="Platform")
+    publisher: str | None = Field(None, validation_alias="Publisher")
+    releasedate: str | None = None
+    players: str | None = None
+    genre: str | None = None
+    imageOriginal: str | None = Field(None, validation_alias="image_Original")
+    youtubeTrailer: str = Field(validation_alias="youtube_Trailer")
