@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.game import Game
 
-
-def _has_trailer():
-    """Condición reutilizable: el juego tiene una URL de tráiler no vacía."""
-    return Game.youtube_Trailer.is_not(None) & (Game.youtube_Trailer != "")
+# Intentos de búsqueda de un id al azar con tráiler antes de rendirse. La tabla
+# `games` no tiene índice sobre `youtube_Trailer`, así que se evita cualquier
+# filtro o `COUNT(*)`: con ~1,4 GB, escanearla completa tarda más de un minuto.
+_RANDOM_ATTEMPTS = 15
 
 
 class GameRepository:
@@ -91,24 +91,39 @@ class GameRepository:
     async def find_random_with_trailer(self) -> Game | None:
         """Devuelve un juego al azar que tenga tráiler, o None si no hay ninguno.
 
-        Se cuenta primero y se elige un `OFFSET` aleatorio en Python en lugar de
-        usar `ORDER BY RAND()`: funciona igual en MySQL y en SQLite (tests) y
-        evita ordenar la tabla completa.
+        No se usa `COUNT(*)` ni `ORDER BY RAND()`: la tabla `games` es muy grande
+        (~1,4 GB y sin índice sobre `youtube_Trailer`) y cualquier consulta que
+        la recorra completa tarda más de un minuto. En su lugar se elige un id al
+        azar dentro del rango de la clave primaria y se consulta por PK; si el id
+        no existe o el juego no tiene tráiler, se reintenta.
         """
-        condition = _has_trailer()
+        bounds = await self._id_bounds()
 
-        total = (
-            await self.db.execute(select(func.count()).select_from(Game).where(condition))
-        ).scalar_one()
-
-        if total == 0:
+        if bounds is None:
             return None
 
-        result = await self.db.execute(
-            select(Game)
-            .where(condition)
-            .order_by(Game.id)
-            .offset(random.randrange(total))
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
+        min_id, max_id = bounds
+
+        for _ in range(_RANDOM_ATTEMPTS):
+            candidate = random.randint(min_id, max_id)
+
+            result = await self.db.execute(select(Game).where(Game.id == candidate))
+            game = result.scalar_one_or_none()
+
+            if game and game.youtube_Trailer:
+                return game
+
+        return None
+
+    async def _id_bounds(self) -> tuple[int, int] | None:
+        """Rango de ids usando el índice de la PK (MIN/MAX tardan segundos aquí)."""
+        first = await self.db.execute(select(Game.id).order_by(Game.id).limit(1))
+        last = await self.db.execute(select(Game.id).order_by(Game.id.desc()).limit(1))
+
+        min_id = first.scalar_one_or_none()
+        max_id = last.scalar_one_or_none()
+
+        if min_id is None or max_id is None:
+            return None
+
+        return min_id, max_id

@@ -123,9 +123,15 @@ backend-python/
   Respuesta `RandomGameResponse` con `id`, `title`, `platform`, `publisher`, `releasedate`,
   `players`, `genre`, `imageOriginal` y `youtubeTrailer` (camelCase). Solo considera juegos
   con `youtube_Trailer` no nulo ni vacío; si no hay ninguno responde 404 con
-  `"No hay juegos con tráiler disponible"`. El repositorio cuenta primero y elige un
-  `OFFSET` aleatorio en Python (portable entre MySQL y SQLite). La ruta se declara **antes**
-  de `/games/{id}` o FastAPI intentaría parsear `"random"` como entero.
+  `"No hay juegos con tráiler disponible"`.
+  El repositorio **no** usa `COUNT(*)`, `ORDER BY RAND()` ni `OFFSET`: la tabla `games` ocupa
+  ~1,4 GB y no tiene índice sobre `youtube_Trailer`, así que cualquier recorrido completo tarda
+  más de un minuto. En su lugar obtiene el rango de ids por PK (`ORDER BY id LIMIT 1`), elige
+  un id al azar y lo consulta por clave primaria; si el id no existe o no tiene tráiler,
+  reintenta hasta `_RANDOM_ATTEMPTS` veces. La ruta se declara **antes** de `/games/{id}` o
+  FastAPI intentaría parsear `"random"` como entero.
+  ⚠️ Si en el servidor MySQL quedan consultas largas antiguas de este endpoint, conviene
+  matarlas (`KILL <id>`); si no, saturan la base y el resto de endpoints también se ralentiza.
 - `POST /games/` → crea juego (`GameCreate`, responde 201).
 - `PUT /games/{id}` → actualiza juego.
 - `DELETE /games/{id}` → elimina juego.

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -11,6 +11,7 @@ from app.main import app
 from app.models.game import Game
 from app.models.platform import Platform
 from app.models.review import Review
+from app.repositories import game_repo
 
 DATABASE_URL_TEST = "sqlite+aiosqlite:///:memory:"
 engine_test = create_async_engine(
@@ -389,8 +390,12 @@ async def test_get_games_by_platform_campos_resumidos():
 
 
 @pytest.mark.asyncio
-async def test_get_random_game_con_trailer():
+async def test_get_random_game_con_trailer(monkeypatch):
     """`/games/random` devuelve el juego con tráiler y los campos de la portada."""
+    # El juego con tráiler es el id 1: se fija el id aleatorio para que la
+    # prueba no dependa del azar.
+    monkeypatch.setattr(game_repo.random, "randint", lambda _min, _max: 1)
+
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.get("/games/random")
     assert response.status_code == 200
@@ -405,6 +410,34 @@ async def test_get_random_game_con_trailer():
         "imageOriginal": "https://img.test/elden-ring.jpg",
         "youtubeTrailer": "https://www.youtube.com/embed/elden-ring",
     }
+
+
+@pytest.mark.asyncio
+async def test_get_random_game_reintenta_si_no_tiene_trailer(monkeypatch):
+    """Si el id elegido no tiene tráiler, se prueban otros hasta encontrarlo."""
+    # El juego 2 (Hades) no tiene tráiler; el 1 sí.
+    candidates = iter([2, 1])
+    monkeypatch.setattr(game_repo.random, "randint", lambda _min, _max: next(candidates))
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/random")
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Elden Ring"
+
+
+@pytest.mark.asyncio
+async def test_get_random_game_sin_juegos():
+    """Con la tabla vacía responde 404 sin lanzar consultas por id."""
+    async with AsyncSessionTesting() as session:
+        await session.execute(delete(Game))
+        await session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/games/random")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No hay juegos con tráiler disponible"
 
 
 @pytest.mark.asyncio
