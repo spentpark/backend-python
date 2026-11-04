@@ -322,6 +322,14 @@ python -m build          # genera dist/*.whl y dist/*.tar.gz
    wheel para Python 3.14) e instala las dependencias Python en `/install`. **No** se instalan
    cabeceras de MariaDB: `aiomysql` usa `PyMySQL`, que es Python puro y no enlaza con
    `libmariadb`.
+   - **Debe ser `python:3.14-slim` (Debian/glibc), nunca `python:3.14-alpine`**: los paquetes
+     compilados se copian al stage final (también Debian), así que builder y runtime tienen
+     que compartir la ABI (un builder musl genera binarios incompatibles con la glibc final).
+     Además Alpine usa `apk`, así que el `apt-get` del builder falla con `exit code: 127`.
+   - Todas las dependencias publican wheels `cp314` manylinux para x86_64 (verificado con
+     `pip download --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.14`,
+     incluidas `cryptography`, `bcrypt`, `cffi`, `greenlet` y `pydantic-core`), por lo que
+     `gcc` es solo una red de seguridad.
 2. **Stage final:** copia las librerías, crea el usuario no root `appuser`, copia `app/` con
    `COPY --chown` (evita una capa extra con `chown -R`), expone el puerto `7000` y
    define un `HEALTHCHECK` contra `GET /`. `PYTHONUNBUFFERED=1` hace que los logs se vean al
@@ -331,8 +339,8 @@ Comando de arranque: `uvicorn app.main:app --host 0.0.0.0 --port 7000 --no-serve
 
 > Requisito: el contexto de build debe ser la **raíz del proyecto** (copia `app/`).
 > Las credenciales **no** se hornean en la imagen: se inyectan en runtime con
-> `docker run --env-file .env ...` (o variables del orquestador). Nunca metas `.env` en la
-> imagen; `.env.example` documenta las variables necesarias.
+> `docker run --env-file .env ...` (o variables del orquestador). El `.dockerignore`
+> excluye `.env`/`.env.*`; `.env.example` documenta las variables necesarias.
 
 ## 10. CI/CD (Jenkins + Sonar + Nexus)
 

@@ -26,5 +26,8 @@ pytest.ini
 # Documentación
 *.md
 
-# Variables de entorno locales (el .env se copia explícitamente en el Dockerfile)
+# Variables de entorno locales: nunca se copian a la imagen. Se inyectan en
+# runtime con `docker run --env-file .env ...` o variables del orquestador.
+.env
+.env.*
 .env.local

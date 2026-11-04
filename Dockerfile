@@ -1,5 +1,9 @@
 # --- Stage 1: Build de dependencias ---
-FROM python:3.14-alpine AS builder
+# Debe ser Debian "slim" (glibc), NO Alpine (musl): las dependencias compiladas
+# se copian al stage final `python:3.14-slim`, así que builder y runtime deben
+# compartir la misma ABI (Alpine generaría binarios musllinux incompatibles).
+# Además Alpine usa `apk`, no `apt-get`, y el `RUN` de abajo fallaría con 127.
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
