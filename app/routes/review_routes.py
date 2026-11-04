@@ -1,4 +1,4 @@
-"""Endpoints REST de la entidad Review."""
+"""Endpoints REST de la entidad Review (bajo ``/api/reviews``)."""
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -6,15 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.review_controller import ReviewController
 from app.database import get_db
+from app.middlewares.authenticate_jwt import authenticate_jwt
 from app.repositories.review_repo import ReviewRepository
 from app.schemas.review_schema import PaginatedReviewResponse
 from app.services.review_service import ReviewService
 
-router = APIRouter(prefix="/reviews", tags=["Reviews"])
+router = APIRouter(
+    prefix="/reviews",
+    tags=["Reviews"],
+    dependencies=[Depends(authenticate_jwt)],
+)
 
 
 def get_controller(db: Annotated[AsyncSession, Depends(get_db)]) -> ReviewController:
-    """Factory de dependencias: construye Repository ? Service ? Controller."""
+    """Factory de dependencias: construye Repository → Service → Controller."""
     return ReviewController(ReviewService(ReviewRepository(db)))
 
 

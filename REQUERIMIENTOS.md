@@ -1,5 +1,11 @@
 # Especificación de Requerimientos de Software (SRS)
 
+> **Nota de vigencia (2026-11-04):** este documento describe el estado original (endpoints
+> públicos bajo `/games`, `/platforms` y `/reviews`, puerto 8000). Desde la alineación con
+> `backend-node20` la API expone los mismos endpoints bajo **`/api`**, exige **JWT HS256**
+> en las rutas de negocio (rol `admin` en escrituras) y escucha en el puerto **7000**.
+> El contrato vigente está en [`endpoints.md`](endpoints.md) y [`DEEPSEEK.md`](DEEPSEEK.md).
+
 ## Games API — `backend-python`
 
 | Campo              | Valor                                                                 |

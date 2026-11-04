@@ -1,5 +1,10 @@
 # Especificación de Diseño de Software (SDD)
 
+> **Nota de vigencia (2026-11-04):** el diseño original (endpoints públicos, puerto 8000) se
+> actualizó para replicar `backend-node20`: rutas bajo **`/api`**, **JWT HS256** en las rutas
+> de negocio (rol `admin` en escrituras), middlewares de seguridad HTTP y puerto **7000**.
+> Consulta [`endpoints.md`](endpoints.md) para el contrato vigente.
+
 ## Games API — `backend-python`
 
 | Campo                 | Valor                                              |

@@ -2,6 +2,11 @@
 
 Este documento consolida todos los diagramas generados en formato visual para referencia rápida.
 
+> **Nota de vigencia (2026-11-04):** los diagramas reflejan el diseño original (endpoints
+> públicos, puerto 8000). El estado actual replica `backend-node20`: rutas bajo **`/api`**,
+> **JWT HS256** en las rutas de negocio (rol `admin` en escrituras) y puerto **7000**.
+> Consulta [`endpoints.md`](endpoints.md) para el contrato vigente.
+
 ---
 
 ## 1️⃣ Diagrama de Capas de Arquitectura

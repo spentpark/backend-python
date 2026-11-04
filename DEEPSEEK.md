@@ -9,8 +9,12 @@ Contexto instructivo para agentes de IA que trabajen en este repositorio.
 **SQLAlchemy en modo asíncrono** (`aiomysql`).
 
 - Título de la API (OpenAPI): `Games API` — versión `1.0.0`.
-- Documentación interactiva disponible en `/docs` (Swagger UI) al ejecutar el servidor.
-- Todos los endpoints son **públicos** (no hay autenticación ni autorización).
+- Documentación interactiva en `/api-docs` (Swagger UI) y OpenAPI en `/api-docs.json`.
+- Los endpoints viven bajo **`/api`** con los mismos nombres que `backend-node20`
+  (`/api/games`, `/api/platforms`, `/api/reviews/{id}`, `/api/similar`... etc.).
+- Las rutas de negocio exigen **JWT HS256** (secreto, `issuer` y `audience` compartidos con
+  `backend-node20` y `rss-game-node`); las escrituras exigen además rol `admin`.
+- La aplicación escucha en el puerto **7000**.
 - El código y la documentación de diseño están redactados en **español**; mantén ese idioma
   en comentarios, `detail` de excepciones y mensajes nuevos.
 
@@ -26,6 +30,7 @@ Contexto instructivo para agentes de IA que trabajen en este repositorio.
 | Validación/schemas| Pydantic >= 2.13.5                           |
 | Configuración     | python-dotenv >= 1.2.4                       |
 | Criptografía      | cryptography >= 50.0.2                       |
+| Autenticación     | PyJWT >= 2.10.1 (HS256) + bcrypt >= 4.2.1    |
 | Base de datos     | MySQL / MariaDB                              |
 | Testing           | pytest + pytest-asyncio + httpx + aiosqlite  |
 | Calidad           | SonarQube / sonar-scanner                    |
@@ -37,11 +42,19 @@ Contexto instructivo para agentes de IA que trabajen en este repositorio.
 El proyecto sigue una **arquitectura en capas**. Cada petición fluye en una sola dirección:
 
 ```
-Routes → Controllers → Services → Repositories → Models (ORM) → DB
+Routes → Middlewares (JWT, cabeceras, rate limiting) → Controllers → Services → Repositories
+                              → Models (ORM) → DB
                           ↕
                      Schemas (Pydantic)  ← contratos de entrada/salida JSON
 ```
 
+- **Middlewares** (`app/middlewares/`): `authenticate_jwt` (dependencia FastAPI que valida el
+  JWT y expone `AuthUser`; `require_role`/`require_admin` para escrituras) y `security`
+  (cabeceras tipo Helmet, límite de cuerpo de 10 kb y rate limiting por IP).
+- **Configuración** (`app/config/auth.py`): secreto/`issuer`/`audience` JWT, usuario estático
+  y validación fail-closed en producción.
+- **Errores** (`app/errors.py`): normaliza todas las respuestas a `{"error": "<mensaje>"}`
+  (400 de validación, 404 de ruta, 500 sin stack trace).
 - **Routes** (`app/routes/`): definen endpoints REST, `APIRouter` con `prefix` y `tags`, y la
   inyección de dependencias mediante una factory `get_controller(db = Depends(get_db))` que
   construye `Repository → Service → Controller`. Las dependencias y los query params se
@@ -59,7 +72,7 @@ Routes → Controllers → Services → Repositories → Models (ORM) → DB
   `populate_by_name = True` para aceptar alias (p. ej. campos que empiezan por número:
   `3djuegos_url`). `PaginationInfo` es compartido (`app/schemas/pagination.py`).
 
-### Flujo de una petición (ejemplo `GET /games/{id}`)
+### Flujo de una petición (ejemplo `GET /api/games/{id}`)
 
 `Cliente → Route → Controller → Service → Repository → DB` y de vuelta, serializando con
 Pydantic. Si no existe el recurso, el **Controller** lanza `HTTPException(404)`.
@@ -69,18 +82,22 @@ Pydantic. Si no existe el recurso, el **Controller** lanza `HTTPException(404)`.
 ```
 backend-python/
 ├── app/
-│   ├── main.py            # Instancia FastAPI, routers, /favicon.ico y ruta raíz "/"
+│   ├── main.py            # App FastAPI: CORS, seguridad, routers /api y docs /api-docs
 │   ├── database.py        # Engine async, AsyncSessionLocal, Base, dependencia get_db()
-│   ├── controllers/       # game_controller, platform_controller, review_controller
-│   ├── models/            # game, platform, review (ORM)
-│   ├── repositories/      # game_repo, platform_repo, review_repo
-│   ├── routes/            # game_routes, platform_routes, review_routes
-│   ├── schemas/           # game_schema, platform_schema, review_schema, pagination (Pydantic)
-│   ├── services/          # game_service, platform_service, review_service
+│   ├── errors.py          # Manejadores globales de errores (contrato {"error": ...})
+│   ├── config/auth.py     # Configuración JWT, usuario estático y validación de arranque
+│   ├── middlewares/       # authenticate_jwt (JWT/roles) y security (headers, body, rate limit)
+│   ├── controllers/       # game, platform, review, similar_games, stats, auth, main
+│   ├── models/            # game, platform, review, similar_game (ORM)
+│   ├── repositories/      # game, platform, review, similar_games, stats, main
+│   ├── routes/            # main, auth, game, similar, platform, review, stats
+│   ├── schemas/           # game, platform, review, similar, stats, auth, pagination (Pydantic)
+│   ├── services/          # game, platform, review, similar_games, stats, auth
 │   └── utils/             # pagination (build_paginated_response)
 ├── tests/
+│   ├── conftest.py        # Entorno JWT de test + rate limits altos
 │   └── test_api.py        # Pruebas de integración con SQLite en memoria
-├── Dockerfile             # Build multi-stage (python:3.14-slim)
+├── Dockerfile             # Build multi-stage (python:3.14-slim), puerto 7000
 ├── Jenkinsfile            # Pipeline CI/CD
 ├── sonar-project.properties
 ├── requirements.txt
@@ -104,55 +121,90 @@ backend-python/
   - `find_all()` filtra por `url IS NOT NULL`.
 - **`review`** (clase `Review`): `id` (PK), `name`, `date`, `review` (NOT NULL), `score`,
   `source` (NOT NULL), `id_game` (FK → `games.id`, `ON DELETE SET NULL`, `ON UPDATE CASCADE`).
+- **`similar_game`** (clase `SimilarGame`): `id_game` (PK, juego de referencia) y `json` (TEXT
+  con el array `[{ id, title, similarity }]` precalculado). Lo expone
+  `GET /api/games/{id}/similar`, que excluye el propio juego y calcula el porcentaje de
+  similitud redondeado a dos decimales.
 - **No hay relaciones ORM** (`relationship`) declaradas; solo la FK a nivel de base de datos.
 
 ## 6. Endpoints expuestos
 
-### Root
-- `GET /` → mensaje de bienvenida con referencia a `/docs`.
+### Root y utilidades
+- `GET /` → mensaje de bienvenida con referencia a `/api-docs`.
 - `GET /favicon.ico` → `204 No Content` (para evitar ruido 404 en logs).
+- `GET /api-docs` → Swagger UI y `GET /api-docs.json` → OpenAPI 3.1.
+- `GET /api/saludo` → mensaje de bienvenida (pública).
+- `GET /api/hello` → health-check de la BD; responde `{ "mensaje": "¡Conectado a MariaDB!",
+  "fecha": "<ISO-8601>" }` o 500 `{ "error": "Error en la base de datos" }` (pública).
 
-### Games (`/games`)
-- `GET /games/` → lista paginada filtrable por plataforma; query params `platform` (opcional),
-  `page` (default 1), `limit` (default 10). Respuesta `PaginatedGameSummaryResponse`
-  (`data` + `pagination`) donde cada registro expone **solo** `id`, `title` y `platform`.
-  El repositorio selecciona únicamente esas columnas (no carga las columnas `Text` pesadas).
-- `GET /games/search?title=...&page=&limit=` → búsqueda por prefijo de título (400 si falta `title`).
-- `GET /games/{id}` → juego por ID (404 si no existe).
-- `GET /games/random` → juego al azar con tráiler para la pantalla de inicio del SPA.
-  Respuesta `RandomGameResponse` con `id`, `title`, `platform`, `publisher`, `releasedate`,
-  `players`, `genre`, `imageOriginal` y `youtubeTrailer` (camelCase). Solo considera juegos
-  con `youtube_Trailer` no nulo ni vacío; si no hay ninguno responde 404 con
-  `"No hay juegos con tráiler disponible"`.
+### Autenticación (`/api/auth`)
+- `POST /api/auth/login` con `{ "username", "password" }` → 200
+  `{ "token", "tokenType": "Bearer", "expiresAt" }`; 400 si faltan credenciales o la
+  longitud excede 100/200; 401 `Credenciales inválidas`; 500 `Error al iniciar sesión`.
+  Añade `Cache-Control: no-store` y `Pragma: no-cache`.
+- `GET /api/auth/me` (JWT) → `{ "username", "role" }`; 401 `No autorizado` con
+  `WWW-Authenticate: Bearer`.
+
+### Games (`/api/games`, todas JWT)
+- `GET /api/games` → lista paginada filtrable por `platform`, `genre`, `year`, `decade`,
+  `players`, `sort`, `page` (default 1) y `limit` (default 10). Respuesta
+  `PaginatedGameSummaryResponse` (`data` + `pagination`) donde cada registro expone **solo**
+  `id`, `title` y `platform`. Sin `platform` (y sin filtros avanzados) responde `data: []`,
+  igual que Node. `sort` acepta la whitelist `id_asc` (default), `id_desc`, `title_asc`,
+  `title_desc`, `year_asc`, `year_desc`, `score_desc`.
+- `GET /api/games/search?title=...&page=&limit=` → búsqueda por prefijo de título
+  (400 `El parámetro "title" es requerido` si falta `title`).
+- `GET /api/games/{id}` → juego por ID (404 si no existe).
+- `GET /api/games/random` (`platform`/`genre` opcionales) → juego al azar con tráiler.
+  Respuesta `RandomGameResponse` con `id`, `title`, `description`, `platform`, `publisher`,
+  `releasedate`, `players`, `genre`, `imageMedium`, `imageLarge`, `imageOriginal`,
+  `imageFront` y `youtubeTrailer` (camelCase). Si no hay ninguno responde 404 con
+  `"No hay ningún juego con tráiler disponible"`.
   El repositorio **no** usa `COUNT(*)`, `ORDER BY RAND()` ni `OFFSET`: la tabla `games` ocupa
-  ~1,4 GB y no tiene índice sobre `youtube_Trailer`, así que cualquier recorrido completo tarda
-  más de un minuto. En su lugar obtiene el rango de ids por PK (`ORDER BY id LIMIT 1`), elige
-  un id al azar y lo consulta por clave primaria; si el id no existe o no tiene tráiler,
-  reintenta hasta `_RANDOM_ATTEMPTS` veces. La ruta se declara **antes** de `/games/{id}` o
-  FastAPI intentaría parsear `"random"` como entero.
-  ⚠️ Si en el servidor MySQL quedan consultas largas antiguas de este endpoint, conviene
-  matarlas (`KILL <id>`); si no, saturan la base y el resto de endpoints también se ralentiza.
-- `POST /games/` → crea juego (`GameCreate`, responde 201).
-- `PUT /games/{id}` → actualiza juego.
-- `DELETE /games/{id}` → elimina juego.
+  ~1,4 GB y no tiene índice sobre `youtube_Trailer`. En su lugar obtiene el rango de ids por
+  PK (`ORDER BY id LIMIT 1`), elige un id al azar y lo consulta por clave primaria; si el id
+  no existe o no tiene tráiler, reintenta (`_RANDOM_ATTEMPTS`). Con filtros replica el
+  algoritmo de Node (`MAX(id)` del subconjunto filtrado + sorteo + fallback). La ruta se
+  declara **antes** de `/api/games/{id}`.
+- `GET /api/games/{id}/similar?limit=` → similares precalculados en `similar_game`
+  (`id_game`, `json` TEXT con `[{ id, title, similarity }]`). Excluye el propio juego, ordena
+  por similitud descendente, calcula `similarityPercentage` (2 decimales) y responde
+  `{ gameId, total, similarGames }`; 404 si no hay fila o no quedan similares; 500 si el JSON
+  es inválido.
+- `POST /api/games/` → crea juego (`GameCreate`, responde 201). **Rol admin.**
+- `PUT /api/games/{id}` → actualiza juego. **Rol admin.**
+- `DELETE /api/games/{id}` → elimina juego. **Rol admin.**
 
-### Platforms (`/platforms`)
-- `GET /platforms/` → lista paginada de plataformas con `url` no nulo; query params
-  `page` (default 1), `limit` (default 10). Respuesta `PaginatedPlatformResponse`
-  (`data` + `pagination`).
-- `GET /platforms/{id}` → plataforma por ID (404 si no existe).
-- `POST /platforms/`, `PUT /platforms/{id}`, `DELETE /platforms/{id}`.
+### Platforms (`/api/platforms`, todas JWT)
+- `GET /api/platforms` → lista paginada de plataformas con `url` no nulo; query params
+  `page` (default 1), `limit` (default 10). Respuesta `PaginatedPlatformResponse`.
+- `GET /api/platforms/{id}/top-games` → top 10 juegos por `metacritic_score` (join por
+  `games.Platform = platform.description`); `[]` si la plataforma no tiene juegos.
+- `GET /api/platforms/{id}` → plataforma por ID (404 si no existe).
+- `POST/PUT/DELETE` → **rol admin**.
 
-### Reviews (`/reviews`)
-- `GET /reviews/{id}` → reseñas del juego con ese `id`, **paginadas**; query params `page`
+### Reviews (`/api/reviews`, JWT)
+- `GET /api/reviews/{id}` → reseñas del juego con ese `id`, **paginadas**; query params `page`
   (default 1) y `limit` (default 10). Respuesta `PaginatedReviewResponse` (`data` +
-  `pagination`) y orden por `id`, para que la paginación sea estable entre páginas.
-  Devuelve 404 solo si el juego no tiene **ninguna** reseña; una página fuera de rango
-  responde 200 con `data` vacía y el total real en `pagination`.
+  `pagination`) y orden por `id`. Devuelve 404 solo si el juego no tiene **ninguna** reseña;
+  una página fuera de rango responde 200 con `data` vacía y el total real en `pagination`.
+
+### Stats (`/api/stats`, JWT)
+- `GET /api/stats` → `{ summary: { totalGames, scoredGames, totalPlatforms, totalGenres },
+  platforms: [{label,total}], genres: [...], decades: [...] }`. Caché en memoria **10
+  minutos**; las peticiones concurrentes comparten el cálculo en vuelo y un error no se
+  cachea. Los `GROUP BY` sobre la BD remota son costosos (primera llamada lenta).
 
 > **Paginación:** estructura `{ "data": [...], "pagination": { "currentPage", "perPage",
 > "totalRecords", "totalPages" } }`. `totalPages = ceil(total / limit)`. Los query params
-> `page` y `limit` se validan con `Query(ge=0)` y `Query(ge=1)` respectivamente.
+> `page` y `limit` se validan con `Query(ge=0)` y `Query(ge=1)` respectivamente; un valor
+> inválido se normaliza a 400 `{"error": "Petición inválida"}`.
+
+> **Autenticación:** todas las rutas de negocio exigen `Authorization: Bearer <jwt>` HS256
+> (mismo secreto, `issuer` y `audience` que Node). Sin token o con token inválido → 401
+> `{"error": "No autorizado"}` + `WWW-Authenticate: Bearer`; rol insuficiente → 403
+> `{"error": "Acceso denegado"}`. `POST`, `PUT` y `DELETE` de juegos/plataformas exigen rol
+> `admin`. El login es público.
 
 ## 7. Configuración y variables de entorno
 
@@ -163,10 +215,23 @@ La conexión se construye en `app/database.py` a partir de variables de entorno 
 | ------------- | ---------------- |
 | `DB_USER`     | `admin`          |
 | `DB_PASSWORD` | `password`       |
-| `DB_HOST`     | `192.168.1.13`   |
+| `DB_HOST`     | `192.168.1.82`   |
 | `DB_NAME`     | `game`           |
 
 URL resultante: `mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}`.
+
+Variables de seguridad y servidor (ver `.env.example`):
+
+| Variable | Uso |
+| -------- | --- |
+| `ENVIRONMENT` / `NODE_ENV` | `production` activa el modo fail-closed (obligatorio `JWT_SECRET` y `AUTH_PASSWORD_HASH`) |
+| `JWT_SECRET` / `JWT_EXPIRES_IN` / `JWT_ISSUER` / `JWT_AUDIENCE` | JWT HS256 compartido con Node (`1h`, `rss-game-node`, `rss-game-node-api`) |
+| `AUTH_USERNAME` / `AUTH_ROLE` / `AUTH_PASSWORD_HASH` | Usuario estático y hash bcrypt de la contraseña |
+| `CORS_ORIGINS` / `TRUST_PROXY` | Allowlist de CORS y confianza en proxy inverso para el rate limiting |
+| `API_RATE_LIMIT_WINDOW_MS` / `API_RATE_LIMIT_MAX` | Límite global por IP (300 / 15 min) |
+| `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` | Límite de login por IP (5 / 15 min) |
+| `API_DOCS_ENABLED` | Swagger en `/api-docs` (en producción solo si es `true`) |
+| `PORT` / `HOST` | Puerto (**7000**) e interfaz del servidor |
 
 El **engine** usa `pool_size=10`, `max_overflow=20`, `pool_pre_ping=True` y `pool_recycle=3600`
 (evita reutilizar conexiones cerradas por el `wait_timeout` del servidor). Las sesiones se crean
@@ -174,6 +239,34 @@ con `async_sessionmaker` y `expire_on_commit=False`. La dependencia `get_db()` g
 de la sesión tras cada request.
 
 > **Nunca** subas el archivo `.env` ni credenciales reales al repositorio.
+
+### Seguridad HTTP (réplica de backend-node20)
+
+- **JWT HS256** (`app/services/auth_service.py`, `app/middlewares/authenticate_jwt.py`):
+  mismo secreto/`issuer`/`audience` que Node; `sub` = usuario y claim `role`. 401
+  `{"error": "No autorizado"}` con `WWW-Authenticate: Bearer` y 403 `{"error": "Acceso
+  denegado"}` por rol insuficiente.
+- **Login** (`POST /api/auth/login`): bcrypt + comparación en tiempo constante del usuario;
+  `Cache-Control: no-store` y `Pragma: no-cache`.
+- **Cabeceras** (`app/middlewares/security.py`): CSP, HSTS, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, COOP/CORP...; la CSP se omite en `/api-docs` porque
+  Swagger UI usa scripts/estilos inline.
+- **CORS**: allowlist explícita (por defecto en `app/main.py`; `CORS_ORIGINS` la
+  sobreescribe). Incluye los orígenes del SPA React 19 en Vite (`:5173`), `vite preview`
+  (`:4173`) y Nginx (`:8065`) para `localhost` y `127.0.0.1`, sus equivalentes en las IPs
+  del servidor (`192.168.1.82`, `200.83.105.123`) y el frontend Angular legacy
+  (`:4200`/`:4300`). En desarrollo se aceptan `http://localhost[:puerto]` y
+  `http://127.0.0.1[:puerto]`; en producción solo la allowlist. Headers permitidos:
+  `Content-Type`, `Authorization`, `apikey`.
+- **Cuerpo JSON**: máximo 10 kb → 413
+  `{"error": "El cuerpo de la petición es demasiado grande"}`; JSON malformado o validación
+  de esquema → 400 `{"error": "Petición inválida"}`.
+- **Rate limiting** en memoria por IP: global 300 / 15 min y login 5 / 15 min → 429 con
+  `RateLimit-*` y `Retry-After`. `TRUST_PROXY=true` usa `X-Forwarded-For` (solo con proxy
+  de confianza).
+- **404 y 500** siempre en JSON (`{"error": "Ruta no encontrada"}` / genérico sin stack).
+- **Swagger por entorno**: `/api-docs` y `/api-docs.json`; en producción apagado salvo
+  `API_DOCS_ENABLED=true`.
 
 ## 8. Build, ejecución y pruebas
 
@@ -189,11 +282,12 @@ pip install -r requirements.txt
 ### Ejecutar la aplicación
 
 ```bash
-uvicorn app.main:app --reload
-# Alternativa: python app/main.py
+uvicorn app.main:app --reload --port 7000
+# Alternativa (usa el puerto 7000 por defecto): python -m app.main
 ```
 
-Servidor en `http://localhost:8000` — Swagger en `http://localhost:8000/docs`.
+Servidor en `http://localhost:7000` — Swagger en `http://localhost:7000/api-docs` y
+OpenAPI en `http://localhost:7000/api-docs.json`.
 
 ### Ejecutar pruebas
 
@@ -228,16 +322,17 @@ python -m build          # genera dist/*.whl y dist/*.tar.gz
    wheel para Python 3.14) e instala las dependencias Python en `/install`. **No** se instalan
    cabeceras de MariaDB: `aiomysql` usa `PyMySQL`, que es Python puro y no enlaza con
    `libmariadb`.
-2. **Stage final:** copia las librerías, crea el usuario no root `appuser`, copia `app/` y
-   `.env` con `COPY --chown` (evita una capa extra con `chown -R`), expone el puerto `8000` y
+2. **Stage final:** copia las librerías, crea el usuario no root `appuser`, copia `app/` con
+   `COPY --chown` (evita una capa extra con `chown -R`), expone el puerto `7000` y
    define un `HEALTHCHECK` contra `GET /`. `PYTHONUNBUFFERED=1` hace que los logs se vean al
    instante en `docker logs`.
 
-Comando de arranque: `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+Comando de arranque: `uvicorn app.main:app --host 0.0.0.0 --port 7000 --no-server-header`.
 
-> Requisito: el contexto de build debe ser la **raíz del proyecto** (copia `app/` y `.env`).
-> El `.env` queda embebido en la imagen; lo recomendable es inyectarlo en runtime
-> (`docker run --env-file .env ...`) para no exponer credenciales.
+> Requisito: el contexto de build debe ser la **raíz del proyecto** (copia `app/`).
+> Las credenciales **no** se hornean en la imagen: se inyectan en runtime con
+> `docker run --env-file .env ...` (o variables del orquestador). Nunca metas `.env` en la
+> imagen; `.env.example` documenta las variables necesarias.
 
 ## 10. CI/CD (Jenkins + Sonar + Nexus)
 
@@ -285,21 +380,28 @@ cobertura en `coverage.xml`, resultados de tests en `reports/junit.xml`, exclusi
 
 ## 12. Áreas no implementadas / deuda técnica conocida
 
-- **Sin autenticación/autorización** (endpoints públicos, sin JWT ni roles).
+- **Autenticación JWT ya implementada** (misma seguridad que `backend-node20`): las rutas de
+  negocio exigen token y las escrituras exigen rol `admin`. El login valida contra el hash
+  bcrypt de `AUTH_PASSWORD_HASH`.
 - **CRUD completo de `games` y `platform`:** `POST`/`PUT`/`DELETE` responden 404 con
   `detail` en español cuando el id no existe, y `{"deleted": true}` al borrar.
-- **Reviews** solo implementa lectura (`GET /reviews/{id}`); no hay create/update/delete.
+- **Reviews** solo implementa lectura (`GET /api/reviews/{id}`); no hay create/update/delete.
 - **Sin `relationship` ORM** entre entidades.
-- **Manejo de errores y logging** no centralizados.
-- **Validación de esquema** mínima (no hay longitudes mínimas/máximas estrictas).
+- **Validación de esquema** mínima (no hay longitudes mínimas/máximas estrictas en `game` y
+  `platform`).
 - El repositorio de plataformas filtra `url IS NOT NULL` en `find_all()`, por lo que plataformas
-  sin URL no se listan.
-- `GET /games/` sin filtro de plataforma compara `Game.Platform == None`, por lo que solo
-  devuelve juegos con `Platform` nulo.
+  sin URL no se listan (el endpoint paginado mantiene ese filtro).
+- `GET /api/games` sin `platform` y sin filtros avanzados responde `data: []` (paridad con
+  Node: la comparación se hace contra `NULL`).
+- **Módulo Telegram**: no se replica el bot de `backend-node20` (módulo opcional que requiere
+  `TELEGRAM_BOT_TOKEN`); no hay rutas `/api/telegram/*` en Python.
+- **Stats**: cuatro consultas secuenciales sobre una sesión async; la primera llamada puede
+  tardar (los `GROUP BY` de Node se lanzan en paralelo). Se mitiga con la caché de 10 min.
 
 ## 13. Referencias
 
-- `README.md` — comandos de instalación y ejemplos de respuesta de la API.
+- `README.md` — comandos de instalación, autenticación y endpoints.
+- `endpoints.md` — contrato HTTP detallado (inventario, cuerpos, códigos y auth).
 - `DISEÑO.md` — diagramas de clases, secuencia, flujo y diseño de base de datos.
 - `REQUERIMIENTOS.md` — entidades, endpoints y comportamiento esperado.
 - `DIAGRAMAS_VISUALES.md` — diagramas adicionales.

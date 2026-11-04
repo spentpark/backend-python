@@ -2,6 +2,8 @@
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy.engine import Row
+
 from app.models.platform import Platform
 from app.repositories.platform_repo import PlatformRepository
 from app.utils.pagination import build_paginated_response
@@ -21,6 +23,10 @@ class PlatformService:
 
     async def get_by_id(self, id: int) -> Platform | None:
         return await self.repository.find_by_id(id)
+
+    async def get_top_games(self, id: int) -> Sequence[Row]:
+        """Top 10 juegos de la plataforma por nota Metacritic."""
+        return await self.repository.find_top_games_by_platform(id)
 
     async def create(self, data: dict[str, Any]) -> Platform:
         """Crea una plataforma y devuelve la entidad persistida."""

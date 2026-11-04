@@ -1,10 +1,11 @@
 """Acceso a datos de la entidad Platform (SQLAlchemy Async)."""
 from collections.abc import Sequence
 
-from sqlalchemy import delete, func, select, update
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import Integer, cast, delete, func, select, update
+from sqlalchemy.engine import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.game import Game
 from app.models.platform import Platform
 
 
@@ -38,6 +39,33 @@ class PlatformRepository:
     async def find_by_id(self, id: int) -> Platform | None:
         result = await self.db.execute(select(Platform).where(Platform.id == id))
         return result.scalar_one_or_none()
+
+    async def find_top_games_by_platform(self, id: int) -> Sequence[Row]:
+        """Top 10 juegos de una plataforma por nota Metacritic.
+
+        El nombre de la plataforma vive en ``platform.description`` y la
+        puntuación en ``games.metacritic_score`` (VARCHAR): se castea para
+        ordenar numéricamente, igual que el backend Node.
+        """
+        query = (
+            select(
+                Game.id,
+                Game.title,
+                Game.Platform,
+                Game.genre,
+                Game.releasedate,
+                Game.image_Original,
+                Game.metacritic_score,
+            )
+            .join(Platform, Game.Platform == Platform.description)
+            .where(Platform.id == id)
+            .where(Game.metacritic_score.isnot(None))
+            .where(Game.metacritic_score != "")
+            .order_by(cast(Game.metacritic_score, Integer).desc(), Game.id.asc())
+            .limit(10)
+        )
+
+        return (await self.db.execute(query)).all()
 
     async def create(self, platform_data: dict) -> Platform:
         new_platform = Platform(**platform_data)

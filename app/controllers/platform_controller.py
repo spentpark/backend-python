@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy.engine import Row
 
 from app.models.platform import Platform
 from app.schemas.platform_schema import PlatformCreate
@@ -24,6 +25,10 @@ class PlatformController:
         if not platform:
             raise HTTPException(status_code=404, detail="Plataforma no encontrada")
         return platform
+
+    async def get_top_games(self, id: int) -> Sequence[Row]:
+        """Top 10 juegos de la plataforma (array vacío si no tiene juegos)."""
+        return await self.service.get_top_games(id)
 
     async def create_platform(self, data: PlatformCreate) -> Platform:
         """Crea una plataforma a partir del contrato de entrada."""

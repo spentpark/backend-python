@@ -22,14 +22,25 @@ class GameService:
         rows, total = await self.repository.find_by_title_paginated(title, page, limit)
         return build_paginated_response(rows, total, page, limit)
 
-    async def get_by_platform(self, platform: str, page: int, limit: int) -> dict[str, Any]:
+    async def get_by_platform(
+        self, platform: str | None, page: int, limit: int
+    ) -> dict[str, Any]:
         """Filtra juegos por plataforma con paginación."""
         rows, total = await self.repository.find_by_platform_paginated(platform, page, limit)
         return build_paginated_response(rows, total, page, limit)
 
-    async def get_random_with_trailer(self) -> Game | None:
+    async def get_filtered_paginated(
+        self, filters: dict[str, Any], page: int, limit: int
+    ) -> dict[str, Any]:
+        """Catálogo paginado con filtros avanzados y orden."""
+        rows, total = await self.repository.find_filtered_paginated(filters, page, limit)
+        return build_paginated_response(rows, total, page, limit)
+
+    async def get_random_with_trailer(
+        self, filters: dict[str, Any] | None = None
+    ) -> Game | None:
         """Devuelve un juego al azar que tenga tráiler, o None si no hay ninguno."""
-        return await self.repository.find_random_with_trailer()
+        return await self.repository.find_random_with_trailer(filters)
 
     async def create(self, data: dict[str, Any]) -> Game:
         """Crea un juego y devuelve la entidad persistida."""

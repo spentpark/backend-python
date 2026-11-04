@@ -1,22 +1,26 @@
-"""Endpoints REST de la entidad Game."""
+"""Endpoints REST de la entidad Game (bajo ``/api/games``)."""
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.controllers.game_controller import GameController
+from app.controllers.game_controller import GameController, build_filters
 from app.database import get_db
+from app.middlewares.authenticate_jwt import authenticate_jwt, require_admin
 from app.repositories.game_repo import GameRepository
 from app.schemas.game_schema import (
     GameCreate,
     GameResponse,
-    PaginatedGameResponse,
     PaginatedGameSummaryResponse,
     RandomGameResponse,
 )
 from app.services.game_service import GameService
 
-router = APIRouter(prefix="/games", tags=["Games"])
+router = APIRouter(
+    prefix="/games",
+    tags=["Games"],
+    dependencies=[Depends(authenticate_jwt)],
+)
 
 
 def get_controller(db: Annotated[AsyncSession, Depends(get_db)]) -> GameController:
@@ -26,36 +30,57 @@ def get_controller(db: Annotated[AsyncSession, Depends(get_db)]) -> GameControll
 
 ControllerDep = Annotated[GameController, Depends(get_controller)]
 
+PageParam = Annotated[int, Query(ge=0)]
+LimitParam = Annotated[int, Query(ge=1)]
 
-@router.get("/search", response_model=PaginatedGameResponse)
+
+@router.get("/search", response_model=PaginatedGameSummaryResponse)
 async def search(
-    title: str,
     ctrl: ControllerDep,
-    page: Annotated[int, Query(ge=0)] = 1,
-    limit: Annotated[int, Query(ge=1)] = 10,
+    title: str | None = None,
+    page: PageParam = 1,
+    limit: LimitParam = 10,
 ):
+    """Busca juegos por prefijo de título (``title`` obligatorio)."""
     return await ctrl.search_by_title(title, page, limit)
 
 
-@router.get("/", response_model=PaginatedGameSummaryResponse)
-# Alias sin barra final: evita el 307 que FastAPI emite para `/games`, que el SPA
-# (que llama a `/games`) tendría que seguir en cada petición.
-@router.get("", response_model=PaginatedGameSummaryResponse, include_in_schema=False)
+@router.get("/random", response_model=RandomGameResponse)
+async def get_random(
+    ctrl: ControllerDep,
+    platform: str | None = None,
+    genre: str | None = None,
+):
+    """Devuelve un juego al azar que tenga tráiler (pantalla de inicio del SPA)."""
+    return await ctrl.get_random_game(build_filters(platform=platform, genre=genre))
+
+
+@router.get("", response_model=PaginatedGameSummaryResponse)
+# Alias con barra final: Node tolera `/api/games/` y `/api/games` sin redirigir,
+# pero la ruta documentada es la del contrato (`/api/games`).
+@router.get("/", response_model=PaginatedGameSummaryResponse, include_in_schema=False)
 async def get_all(
     ctrl: ControllerDep,
     platform: str | None = None,
-    page: Annotated[int, Query(ge=0)] = 1,
-    limit: Annotated[int, Query(ge=1)] = 10,
+    genre: str | None = None,
+    year: str | None = None,
+    decade: str | None = None,
+    players: str | None = None,
+    sort: str | None = None,
+    page: PageParam = 1,
+    limit: LimitParam = 10,
 ):
-    return await ctrl.filter_by_platform(platform, page, limit)
+    """Lista juegos por plataforma o con filtros avanzados (paginado)."""
+    filters = build_filters(
+        platform=platform,
+        genre=genre,
+        year=year,
+        decade=decade,
+        players=players,
+        sort=sort,
+    )
 
-
-# Debe declararse antes de `/{id}`: si no, FastAPI intentaría convertir
-# "random" en un entero y el endpoint respondería 422.
-@router.get("/random", response_model=RandomGameResponse)
-async def get_random(ctrl: ControllerDep):
-    """Devuelve un juego al azar que tenga tráiler (pantalla de inicio del SPA)."""
-    return await ctrl.get_random_game()
+    return await ctrl.filter_games(filters, page, limit)
 
 
 @router.get("/{id}", response_model=GameResponse)
@@ -63,16 +88,29 @@ async def get_by_id(id: int, ctrl: ControllerDep):
     return await ctrl.get_game_by_id(id)
 
 
-@router.post("/", response_model=GameResponse, status_code=201)
+@router.post(
+    "",
+    response_model=GameResponse,
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+# Alias con barra final: Node tolera `/api/games/` y `/api/games` sin redirigir.
+@router.post(
+    "/",
+    response_model=GameResponse,
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+    include_in_schema=False,
+)
 async def create(data: GameCreate, ctrl: ControllerDep):
     return await ctrl.create_game(data)
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(require_admin)])
 async def update(id: int, data: GameCreate, ctrl: ControllerDep):
     return await ctrl.update_game(id, data)
 
 
-@router.delete("/{id}")
+@router.delete("/{id}", dependencies=[Depends(require_admin)])
 async def delete(id: int, ctrl: ControllerDep):
     return await ctrl.delete_game(id)

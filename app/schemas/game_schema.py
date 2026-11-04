@@ -77,17 +77,22 @@ class RandomGameResponse(BaseModel):
     """Juego al azar con los datos que muestra la pantalla de inicio.
 
     Los nombres de los campos se normalizan a camelCase para el SPA, aunque el
-    modelo ORM use `image_Original` y `youtube_Trailer`.
+    modelo ORM use `image_Original` y `youtube_Trailer`. El contrato replica el
+    de ``backend-node20`` (incluye las variantes de imagen y la descripción).
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     title: str
+    description: str | None = None
     platform: str | None = Field(None, validation_alias="Platform")
     publisher: str | None = Field(None, validation_alias="Publisher")
     releasedate: str | None = None
     players: str | None = None
     genre: str | None = None
+    imageMedium: str | None = Field(None, validation_alias="image_Medium")
+    imageLarge: str | None = Field(None, validation_alias="image_Large")
     imageOriginal: str | None = Field(None, validation_alias="image_Original")
+    imageFront: str | None = Field(None, validation_alias="image_Front")
     youtubeTrailer: str = Field(validation_alias="youtube_Trailer")

@@ -1,5 +1,5 @@
 # --- Stage 1: Build de dependencias ---
-FROM python:3.14-slim AS builder
+FROM python:3.14-alpine AS builder
 
 WORKDIR /build
 
@@ -36,17 +36,16 @@ RUN adduser --disabled-password --gecos "" --no-create-home appuser
 # Código de la aplicación
 COPY --chown=appuser:appuser app/ ./app/
 
-# Credenciales: se copian para mantener el arranque actual, pero lo recomendable
-# es inyectarlas en runtime (`docker run --env-file .env ...`) para no dejarlas
-# embebidas en la imagen.
-COPY --chown=appuser:appuser .env .env
+# Las credenciales NO se copian dentro de la imagen: se inyectan en runtime
+# (`docker run --env-file .env ...` o variables del orquestador) para no dejar
+# secretos horneados. `.env.example` documenta las variables necesarias.
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 7000
 
 # Healthcheck sin dependencias externas (usa solo la librería estándar)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7000/')"]
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7000", "--no-server-header"]
