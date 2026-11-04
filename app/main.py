@@ -101,7 +101,6 @@ def create_app() -> FastAPI:
         docs_url="/api-docs" if docs_enabled else None,
         openapi_url="/api-docs.json" if docs_enabled else None,
         redoc_url=None,
-        server_header=False,
     )
 
     # Orden de ejecución (de fuera hacia dentro): cabeceras de seguridad → CORS →

@@ -216,9 +216,10 @@ La conexión se construye en `app/database.py` a partir de variables de entorno 
 | `DB_USER`     | `admin`          |
 | `DB_PASSWORD` | `password`       |
 | `DB_HOST`     | `192.168.1.82`   |
+| `DB_PORT`     | `3306`           |
 | `DB_NAME`     | `game`           |
 
-URL resultante: `mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}`.
+URL resultante: `mysql+aiomysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}`.
 
 Variables de seguridad y servidor (ver `.env.example`):
 
