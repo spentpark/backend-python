@@ -40,6 +40,11 @@ RUN adduser --disabled-password --gecos "" --no-create-home appuser
 # Código de la aplicación
 COPY --chown=appuser:appuser app/ ./app/
 
+# Falla el build si falta una dependencia o la app no importa (p. ej. greenlet,
+# que SQLAlchemy async necesita). Sin esto, el fallo solo aparecería al arrancar
+# el contenedor.
+RUN python -c "from app.main import app; print('Import de app.main correcto')"
+
 # Las credenciales NO se copian dentro de la imagen: se inyectan en runtime
 # (`docker run --env-file .env ...` o variables del orquestador) para no dejar
 # secretos horneados. `.env.example` documenta las variables necesarias.

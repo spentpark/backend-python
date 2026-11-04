@@ -25,7 +25,7 @@ Contexto instructivo para agentes de IA que trabajen en este repositorio.
 | Lenguaje          | Python 3.14                                  |
 | Framework web     | FastAPI >= 0.142.2                           |
 | Servidor ASGI     | Uvicorn >= 0.54.0                            |
-| ORM               | SQLAlchemy >= 2.1.3 (async)                  |
+| ORM               | SQLAlchemy >= 2.1.3 con extra `asyncio` (async; instala `greenlet`) |
 | Driver DB         | aiomysql >= 0.3.2                            |
 | Validación/schemas| Pydantic >= 2.13.5                           |
 | Configuración     | python-dotenv >= 1.2.4                       |
@@ -336,6 +336,12 @@ python -m build          # genera dist/*.whl y dist/*.tar.gz
    instante en `docker logs`.
 
 Comando de arranque: `uvicorn app.main:app --host 0.0.0.0 --port 7000 --no-server-header`.
+
+> **Dependencia crítica:** `requirements.txt` declara `sqlalchemy[asyncio]`, no `sqlalchemy` a
+> secas. SQLAlchemy 2.x ya no instala `greenlet` por defecto y el arranque falla con
+> `ModuleNotFoundError: No module named 'greenlet'` al importar `sqlalchemy.ext.asyncio`.
+> El Dockerfile ejecuta un `python -c "from app.main import app"` en el build para detectar
+> este tipo de fallos antes de arrancar el contenedor.
 
 > Requisito: el contexto de build debe ser la **raíz del proyecto** (copia `app/`).
 > Las credenciales **no** se hornean en la imagen: se inyectan en runtime con
