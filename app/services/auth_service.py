@@ -14,8 +14,10 @@ import jwt
 
 from app.config import auth as auth_config
 
-BEARER_PATTERN = re.compile(r"^Bearer\s+(.+)$", re.IGNORECASE)
-_DURATION_PATTERN = re.compile(r"^\s*(\d+)\s*([smhd]?)\s*$", re.IGNORECASE)
+# Patrón sin cuantificadores solapados: clases de caracteres disjuntas y
+# ``\A``/``\Z`` en lugar de ``\s`` y ``$`` para evitar backtracking super-lineal
+# (los saltos de línea hacen ambigua la posición de ``$``).
+BEARER_PATTERN = re.compile(r"\ABearer[ \t]+(\S+)[ \t]*\Z", re.IGNORECASE)
 _UNIT_SECONDS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 DEFAULT_TOKEN_SECONDS = 3600
 
@@ -35,17 +37,22 @@ def extract_bearer_token(header: str | None) -> str | None:
 
 
 def _parse_expires_in(value: str | None) -> int:
-    """Convierte ``1h``/``30m``/``3600`` a segundos (por defecto una hora)."""
+    """Convierte ``1h``/``30m``/``3600`` a segundos (por defecto una hora).
+
+    Se parsea a mano (sin expresión regular) para no exponerse a un patrón con
+    backtracking super-lineal: solo se aceptan dígitos y un sufijo de unidad.
+    """
     if not value:
         return DEFAULT_TOKEN_SECONDS
 
-    match = _DURATION_PATTERN.match(str(value))
+    raw = str(value).strip().lower()
+    unit = raw[-1] if raw and raw[-1] in _UNIT_SECONDS else ""
+    amount_text = raw[:-1].rstrip() if unit else raw
 
-    if not match:
+    if not amount_text.isdigit():
         return DEFAULT_TOKEN_SECONDS
 
-    amount = int(match.group(1))
-    unit = match.group(2).lower()
+    amount = int(amount_text)
 
     if amount <= 0:
         return DEFAULT_TOKEN_SECONDS

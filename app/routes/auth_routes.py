@@ -19,12 +19,12 @@ def _set_no_store(response: Response) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(response: Response, data: LoginRequest | None = None):
+def login(response: Response, data: LoginRequest | None = None):
     """Valida usuario y contraseña (hash bcrypt) y emite un JWT HS256."""
     username = data.username if data else None
     password = data.password if data else None
 
-    issued = await controller.login(username, password)
+    issued = controller.login(username, password)
     _set_no_store(response)
 
     return issued

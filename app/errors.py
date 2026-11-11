@@ -47,7 +47,7 @@ def install_exception_handlers(application: FastAPI) -> None:
             content={"error": INVALID_REQUEST_MESSAGE},
         )
 
-    async def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    def unexpected_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         logger.exception(
             "Error interno en %s %s: %s", request.method, request.url.path, exc
         )

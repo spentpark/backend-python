@@ -57,7 +57,7 @@ def auth_headers(role: str = "admin") -> dict[str, str]:
     return {"Authorization": f"Bearer {issued['token']}"}
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(autouse=True)
 def setup_db():
     """Crea y destruye el esquema SQLite con un catálogo de prueba."""
     clear_stats_cache()
@@ -395,7 +395,7 @@ async def test_get_game_by_id_y_404():
 
 @pytest.mark.asyncio
 async def test_random_game_con_trailer(monkeypatch):
-    monkeypatch.setattr(game_repo.random, "randint", lambda _min, _max: 1)
+    monkeypatch.setattr(game_repo, "_random_id", lambda _low, _high: 1)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.get("/api/games/random", headers=auth_headers())
@@ -420,7 +420,7 @@ async def test_random_game_con_trailer(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_random_game_por_genero(monkeypatch):
-    monkeypatch.setattr(game_repo.random, "randint", lambda _min, _max: 1)
+    monkeypatch.setattr(game_repo, "_random_id", lambda _low, _high: 1)
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.get(
@@ -890,3 +890,573 @@ async def test_get_db_entrega_y_cierra_la_sesion():
     session = await generator.__anext__()
     assert isinstance(session, AsyncSession)
     await generator.aclose()
+
+
+# --- Cobertura de ramas defensivas y utilidades internas -------------------
+
+import runpy
+import time
+from datetime import datetime, timedelta, timezone
+
+import jwt as pyjwt
+import uvicorn
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
+from starlette.requests import Request
+from starlette.responses import Response
+
+from app.config import auth as auth_config
+from app.controllers.game_controller import GameController
+from app.controllers.main_controller import MainController
+from app.controllers.platform_controller import PlatformController
+from app.controllers.stats_controller import StatsController
+from app.middlewares.authenticate_jwt import authenticate_jwt
+from app.middlewares.security import (
+    MAX_WINDOW_ENTRIES,
+    BodyLimitMiddleware,
+    _env_positive_int,
+)
+from app.repositories import main_repo
+from app.repositories.game_repo import GameRepository
+from app.repositories.platform_repo import PlatformRepository
+from app.routes import similar_routes
+from app.services.game_service import GameService
+from app.services.platform_service import PlatformService
+from app.services.similar_games_service import (
+    SimilarGamesParseError,
+    parse_similar_games,
+    to_similar_game,
+)
+
+
+async def _responder_sin_contenido(_request):
+    return Response(status_code=204)
+
+
+def _peticion(method: str = "GET", path: str = "/api/x", headers=None) -> Request:
+    """Construye un `Request` de Starlette sin pasar por un servidor HTTP."""
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": method,
+        "path": path,
+        "raw_path": path.encode("utf-8"),
+        "query_string": b"",
+        "headers": headers or [],
+        "client": ("1.2.3.4", 123),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    return Request(scope)
+
+
+# --- Autenticación: utilidades internas ------------------------------------
+
+
+def test_extraer_token_bearer():
+    assert auth_service.extract_bearer_token(None) is None
+    assert auth_service.extract_bearer_token(123) is None
+    assert auth_service.extract_bearer_token("Basic abc") is None
+    assert auth_service.extract_bearer_token("Bearer abc.def") == "abc.def"
+    assert auth_service.extract_bearer_token("bearer   xyz   ") == "xyz"
+
+
+def test_parse_expires_in_valores():
+    assert auth_service._parse_expires_in(None) == 3600
+    assert auth_service._parse_expires_in("") == 3600
+    assert auth_service._parse_expires_in("abc") == 3600
+    assert auth_service._parse_expires_in("0") == 3600
+    assert auth_service._parse_expires_in("30m") == 1800
+    assert auth_service._parse_expires_in("2d") == 172800
+    assert auth_service._parse_expires_in("3600") == 3600
+
+
+def test_login_sin_hash_configurado(monkeypatch):
+    monkeypatch.setenv("AUTH_PASSWORD_HASH", "")
+
+    assert auth_service.login("admin", "cualquiera") is None
+
+
+def test_login_con_hash_invalido_no_lanza(monkeypatch):
+    monkeypatch.setenv("AUTH_PASSWORD_HASH", "esto-no-es-un-hash-bcrypt")
+
+    assert auth_service.login("admin", "cualquiera") is None
+
+
+def test_verify_token_con_claims_de_tipo_incorrecto():
+    ahora = int(datetime.now(timezone.utc).timestamp())
+    opciones = auth_config.get_verify_options()
+    payload = {
+        "sub": "admin",
+        "role": 7,
+        "iss": opciones["issuer"],
+        "aud": opciones["audience"],
+        "iat": ahora,
+        "exp": ahora + 600,
+    }
+    token = pyjwt.encode(
+        payload, auth_config.get_jwt_secret_or_raise(), algorithm="HS256"
+    )
+
+    with pytest.raises(auth_service.AuthError):
+        auth_service.verify_token(token)
+
+
+def test_get_jwt_secret_or_raise_sin_secreto(monkeypatch):
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError):
+        auth_config.get_jwt_secret_or_raise()
+
+
+def test_validate_auth_configuration_incompleta_en_desarrollo(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    monkeypatch.delenv("AUTH_PASSWORD_HASH", raising=False)
+
+    assert auth_config.validate_auth_configuration() is False
+
+
+def test_validate_auth_configuration_incompleta_en_produccion(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError):
+        auth_config.validate_auth_configuration()
+
+
+def test_validate_auth_configuration_secreto_corto_en_desarrollo(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("JWT_SECRET", "corto")
+    monkeypatch.setenv("AUTH_PASSWORD_HASH", "hash-de-prueba")
+
+    assert auth_config.validate_auth_configuration() is True
+
+
+def test_validate_auth_configuration_secreto_corto_en_produccion(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("JWT_SECRET", "corto")
+    monkeypatch.setenv("AUTH_PASSWORD_HASH", "hash-de-prueba")
+
+    with pytest.raises(RuntimeError):
+        auth_config.validate_auth_configuration()
+
+
+def test_authenticate_jwt_con_token_en_blanco():
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="   ")
+
+    with pytest.raises(HTTPException) as exc_info:
+        authenticate_jwt(credentials)
+
+    assert exc_info.value.status_code == 401
+
+
+# --- Configuración de la aplicación ---------------------------------------
+
+
+def test_app_sin_documentacion_cuando_api_docs_esta_deshabilitado(monkeypatch):
+    monkeypatch.setenv("API_DOCS_ENABLED", "false")
+
+    application = create_app()
+
+    assert application.docs_url is None
+    assert application.openapi_url is None
+
+
+@pytest.mark.asyncio
+async def test_cors_usa_cors_origins_del_entorno(monkeypatch):
+    monkeypatch.setenv(
+        "CORS_ORIGINS", "http://app.example.com, http://otro.example.com"
+    )
+    application = create_app()
+    transport_cors = ASGITransport(app=application)
+
+    async with AsyncClient(transport=transport_cors, base_url="http://test") as ac:
+        response = await ac.get(
+            "/api/saludo", headers={"Origin": "http://app.example.com"}
+        )
+
+    assert response.headers["access-control-allow-origin"] == "http://app.example.com"
+
+
+def test_punto_de_entrada_usa_host_y_puerto_del_entorno(monkeypatch):
+    llamadas = {}
+    monkeypatch.setattr(
+        uvicorn, "run", lambda *args, **kwargs: llamadas.update(args=args, kwargs=kwargs)
+    )
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("PORT", "8123")
+
+    runpy.run_module("app.main", run_name="__main__")
+
+    assert llamadas["args"] == ("app.main:app",)
+    assert llamadas["kwargs"]["host"] == "127.0.0.1"
+    assert llamadas["kwargs"]["port"] == 8123
+
+
+# --- Errores no controlados ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_error_no_controlado_devuelve_500_json(monkeypatch):
+    def _falla(*_args, **_kwargs):
+        raise ValueError("error inesperado")
+
+    monkeypatch.setattr(auth_service, "issue_token", _falla)
+    transport_sin_errores = ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with AsyncClient(
+        transport=transport_sin_errores, base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "test-password"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Error interno del servidor"}
+
+
+# --- Controlador de autenticación: ramas de error -------------------------
+
+
+@pytest.mark.asyncio
+async def test_login_credenciales_demasiado_largas_400():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        usuario_largo = await ac.post(
+            "/api/auth/login", json={"username": "a" * 101, "password": "x"}
+        )
+        password_larga = await ac.post(
+            "/api/auth/login", json={"username": "admin", "password": "x" * 201}
+        )
+
+    assert usuario_largo.status_code == 400
+    assert usuario_largo.json() == {"error": "Credenciales inválidas"}
+    assert password_larga.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_login_error_interno_al_validar_credenciales(monkeypatch):
+    def _falla(*_args, **_kwargs):
+        raise RuntimeError("fallo de validación")
+
+    monkeypatch.setattr(auth_service, "login", _falla)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "test-password"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Error al iniciar sesión"}
+
+
+@pytest.mark.asyncio
+async def test_login_error_al_emitir_token(monkeypatch):
+    def _falla(*_args, **_kwargs):
+        raise RuntimeError("configuración JWT inválida")
+
+    monkeypatch.setattr(auth_service, "issue_token", _falla)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "test-password"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Error al iniciar sesión"}
+
+
+# --- Middlewares de seguridad: ramas defensivas ---------------------------
+
+
+def test_env_positive_int_invalido_usa_fallback(monkeypatch):
+    monkeypatch.setenv("VALOR_NO_NUMERICO", "abc")
+
+    assert _env_positive_int("VALOR_NO_NUMERICO", 9) == 9
+
+    monkeypatch.setenv("VALOR_NO_NUMERICO", "0")
+
+    assert _env_positive_int("VALOR_NO_NUMERICO", 9) == 9
+
+    monkeypatch.delenv("VALOR_NO_NUMERICO")
+
+    assert _env_positive_int("VALOR_NO_NUMERICO", 9) == 9
+
+
+@pytest.mark.asyncio
+async def test_body_limit_con_content_length_invalido():
+    middleware = BodyLimitMiddleware(Starlette())
+    request = _peticion(
+        method="POST", headers=[(b"content-length", b"no-es-un-numero")]
+    )
+
+    response = await middleware.dispatch(request, _responder_sin_contenido)
+
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_ignora_metodo_distinto():
+    middleware = RateLimitMiddleware(
+        Starlette(),
+        window_seconds=60,
+        limit=1,
+        message="Demasiadas solicitudes",
+        path_prefix="/api/auth/login",
+        method="POST",
+    )
+    request = _peticion(method="GET", path="/api/auth/login")
+
+    response = await middleware.dispatch(request, _responder_sin_contenido)
+
+    assert response.status_code == 204
+    assert middleware._requests == {}
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_trust_proxy_usa_x_forwarded_for(monkeypatch):
+    monkeypatch.setenv("TRUST_PROXY", "true")
+    middleware = RateLimitMiddleware(
+        Starlette(), window_seconds=60, limit=1, message="Demasiadas solicitudes"
+    )
+    request = _peticion(headers=[(b"x-forwarded-for", b"203.0.113.9, 10.0.0.1")])
+
+    assert middleware._client_key(request) == "203.0.113.9"
+
+
+def test_rate_limit_poda_entradas_expiradas():
+    middleware = RateLimitMiddleware(
+        Starlette(), window_seconds=60, limit=10, message="Demasiadas solicitudes"
+    )
+    ahora = time.monotonic()
+
+    for indice in range(MAX_WINDOW_ENTRIES + 1):
+        middleware._requests[f"clave-{indice}"] = (ahora - 120, 1)
+
+    middleware._prune(ahora)
+
+    assert middleware._requests == {}
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_reinicia_ventana_expirada(monkeypatch):
+    monkeypatch.delenv("TRUST_PROXY", raising=False)
+    middleware = RateLimitMiddleware(
+        Starlette(), window_seconds=60, limit=1, message="Demasiadas solicitudes"
+    )
+    middleware._requests["1.2.3.4"] = (time.monotonic() - 120, 5)
+
+    response = await middleware.dispatch(_peticion(), _responder_sin_contenido)
+
+    assert response.status_code == 204
+    assert middleware._requests["1.2.3.4"][1] == 1
+
+
+# --- Controladores y repositorios: caminos sin cubrir ---------------------
+
+
+@pytest.mark.asyncio
+async def test_controles_get_all_usan_los_repositorios():
+    async with AsyncSessionTesting() as session:
+        controlador_juegos = GameController(GameService(GameRepository(session)))
+        controlador_plataformas = PlatformController(
+            PlatformService(PlatformRepository(session))
+        )
+
+        juegos = await controlador_juegos.get_all_games()
+        plataformas = await controlador_plataformas.get_all_platforms()
+
+    assert len(juegos) == 3
+    assert [plataforma.id for plataforma in plataformas] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_hello_devuelve_fecha_de_la_base_de_datos():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/hello")
+
+    assert response.status_code == 200
+    assert response.json()["mensaje"] == "¡Conectado a MariaDB!"
+    assert isinstance(response.json()["fecha"], str)
+
+
+class _RepositorioQueFalla:
+    async def find_current_date(self):
+        raise RuntimeError("sin base de datos")
+
+
+@pytest.mark.asyncio
+async def test_hello_con_error_de_base_de_datos_devuelve_500():
+    controlador = MainController(_RepositorioQueFalla())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await controlador.hello()
+
+    assert exc_info.value.status_code == 500
+
+
+class _ServicioDeStatsQueFalla:
+    async def get_stats(self):
+        raise RuntimeError("sin estadísticas")
+
+
+@pytest.mark.asyncio
+async def test_stats_con_error_interno_devuelve_500():
+    controlador = StatsController(_ServicioDeStatsQueFalla())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await controlador.get_stats()
+
+    assert exc_info.value.status_code == 500
+
+
+def test_iso_z_normaliza_fechas_naive_y_con_zona():
+    naive = datetime(2024, 1, 2, 3, 4, 5, 123456)
+    con_zona = datetime(2024, 1, 2, 3, 4, 5, tzinfo=timezone(timedelta(hours=-3)))
+
+    assert main_repo._iso_z(naive) == "2024-01-02T03:04:05.123Z"
+    assert main_repo._iso_z(con_zona) == "2024-01-02T06:04:05.000Z"
+
+
+class _ResultadoDeTexto:
+    def scalar_one(self):
+        return "2024-01-02 03:04:05"
+
+
+class _SesionQueDevuelveTexto:
+    async def execute(self, _query):
+        return _ResultadoDeTexto()
+
+
+@pytest.mark.asyncio
+async def test_find_current_date_con_valor_no_datetime():
+    """Motores que no devuelven `datetime` se serializan con `str()`."""
+    repositorio = main_repo.MainRepository(_SesionQueDevuelveTexto())
+
+    assert await repositorio.find_current_date() == "2024-01-02 03:04:05"
+
+
+@pytest.mark.asyncio
+async def test_actualizar_y_borrar_plataforma_inexistente_404():
+    headers = auth_headers()
+    cuerpo = {"description": "Inexistente", "url": "https://inexistente.test"}
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        updated = await ac.put("/api/platforms/9999", json=cuerpo, headers=headers)
+        deleted = await ac.delete("/api/platforms/9999", headers=headers)
+
+    assert updated.status_code == 404
+    assert updated.json() == {"error": "Plataforma no encontrada"}
+    assert deleted.status_code == 404
+    assert deleted.json() == {"error": "Plataforma no encontrada"}
+
+
+# --- Juegos aleatorios y filtros avanzados --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_filtros_por_players_y_decada():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        por_players = await ac.get(
+            "/api/games",
+            params={"platform": "PlayStation 5", "players": "1"},
+            headers=auth_headers(),
+        )
+        por_decada = await ac.get(
+            "/api/games",
+            params={"platform": "Super Nintendo", "decade": "199"},
+            headers=auth_headers(),
+        )
+
+    assert [juego["id"] for juego in por_players.json()["data"]] == [1]
+    assert [juego["id"] for juego in por_decada.json()["data"]] == [3]
+
+
+@pytest.mark.asyncio
+async def test_random_sin_juegos_en_la_base_devuelve_404():
+    async with AsyncSessionTesting() as session:
+        await session.execute(delete(Game))
+        await session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/games/random", headers=auth_headers())
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_random_filtrado_sin_coincidencias_devuelve_404():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get(
+            "/api/games/random", params={"genre": "NoExiste"}, headers=auth_headers()
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_random_filtrado_usa_el_fallback(monkeypatch):
+    monkeypatch.setattr(game_repo, "_random_id", lambda _low, _high: 999)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get(
+            "/api/games/random", params={"genre": "RPG"}, headers=auth_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == 1
+
+
+# --- Juegos similares: parseo y rutas -------------------------------------
+
+
+def test_parse_similar_games_vacio():
+    assert parse_similar_games(None) == []
+    assert parse_similar_games("") == []
+
+
+def test_parse_similar_games_no_es_lista():
+    with pytest.raises(SimilarGamesParseError):
+        parse_similar_games('{"id": 1}')
+
+
+def test_to_similar_game_filtra_entradas_invalidas():
+    assert to_similar_game("texto") is None
+    assert to_similar_game({"id": 1, "similarity": float("nan")}) is None
+    assert to_similar_game({"id": True, "similarity": 0.5}) is None
+    assert to_similar_game({"id": 1, "similarity": True}) is None
+
+
+@pytest.mark.asyncio
+async def test_similar_de_juego_inexistente_404():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/games/9999/similar", headers=auth_headers())
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_similar_con_limit_invalido_devuelve_todos():
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get(
+            "/api/games/2/similar", params={"limit": "abc"}, headers=auth_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+
+
+def test_parse_limit_casos(monkeypatch):
+    assert similar_routes.parse_limit(None) is None
+    assert similar_routes.parse_limit("0") is None
+    assert similar_routes.parse_limit("3") == 3
+
+    def _entero_que_falla(_value):
+        raise ValueError("no convertible")
+
+    monkeypatch.setattr(similar_routes, "int", _entero_que_falla, raising=False)
+
+    assert similar_routes.parse_limit("42") is None

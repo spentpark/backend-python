@@ -17,7 +17,7 @@ LOGIN_ERROR_MESSAGE = "Error al iniciar sesión"
 
 
 class AuthController:
-    async def login(self, username: str | None, password: str | None) -> dict[str, str]:
+    def login(self, username: str | None, password: str | None) -> dict[str, str]:
         """Valida las credenciales y devuelve el JWT emitido."""
         if (
             not isinstance(username, str)

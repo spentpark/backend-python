@@ -9,6 +9,8 @@ from app.models.platform import Platform
 from app.schemas.platform_schema import PlatformCreate
 from app.services.platform_service import PlatformService
 
+PLATFORM_NOT_FOUND_MESSAGE = "Plataforma no encontrada"
+
 
 class PlatformController:
     def __init__(self, service: PlatformService):
@@ -23,7 +25,7 @@ class PlatformController:
     async def get_platform_by_id(self, id: int) -> Platform:
         platform = await self.service.get_by_id(id)
         if not platform:
-            raise HTTPException(status_code=404, detail="Plataforma no encontrada")
+            raise HTTPException(status_code=404, detail=PLATFORM_NOT_FOUND_MESSAGE)
         return platform
 
     async def get_top_games(self, id: int) -> Sequence[Row]:
@@ -38,11 +40,11 @@ class PlatformController:
         """Actualiza una plataforma; lanza 404 si el id no existe."""
         platform = await self.service.update(id, data.model_dump())
         if not platform:
-            raise HTTPException(status_code=404, detail="Plataforma no encontrada")
+            raise HTTPException(status_code=404, detail=PLATFORM_NOT_FOUND_MESSAGE)
         return platform
 
     async def delete_platform(self, id: int) -> dict[str, bool]:
         """Elimina una plataforma; lanza 404 si el id no existe."""
         if not await self.service.delete(id):
-            raise HTTPException(status_code=404, detail="Plataforma no encontrada")
+            raise HTTPException(status_code=404, detail=PLATFORM_NOT_FOUND_MESSAGE)
         return {"deleted": True}

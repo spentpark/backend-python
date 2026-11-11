@@ -10,6 +10,7 @@ from app.schemas.game_schema import GameCreate
 from app.services.game_service import GameService
 
 TITLE_REQUIRED_MESSAGE = 'El parámetro "title" es requerido'
+GAME_NOT_FOUND_MESSAGE = "Juego no encontrado"
 
 
 def build_filters(
@@ -43,7 +44,7 @@ class GameController:
     async def get_game_by_id(self, id: int) -> Game:
         game = await self.service.get_by_id(id)
         if not game:
-            raise HTTPException(status_code=404, detail="Juego no encontrado")
+            raise HTTPException(status_code=404, detail=GAME_NOT_FOUND_MESSAGE)
         return game
 
     async def search_by_title(
@@ -79,11 +80,11 @@ class GameController:
         """Actualiza un juego; lanza 404 si el id no existe."""
         game = await self.service.update(id, data.model_dump())
         if not game:
-            raise HTTPException(status_code=404, detail="Juego no encontrado")
+            raise HTTPException(status_code=404, detail=GAME_NOT_FOUND_MESSAGE)
         return game
 
     async def delete_game(self, id: int) -> dict[str, bool]:
         """Elimina un juego; lanza 404 si el id no existe."""
         if not await self.service.delete(id):
-            raise HTTPException(status_code=404, detail="Juego no encontrado")
+            raise HTTPException(status_code=404, detail=GAME_NOT_FOUND_MESSAGE)
         return {"deleted": True}

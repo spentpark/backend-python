@@ -103,12 +103,15 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    # Orden de ejecución (de fuera hacia dentro): cabeceras de seguridad → CORS →
+    # Orden de ejecución (de fuera hacia dentro): CORS → cabeceras de seguridad →
     # rate limiting → límite de cuerpo → rutas. Es el equivalente al orden de
-    # middlewares de Express en el backend Node.
+    # middlewares de Express en el backend Node. CORS se registra al final
+    # (queda como el middleware más externo) para que el navegador pueda leer
+    # también las respuestas de error del resto de middlewares (403/413/429/500).
     application.add_middleware(BodyLimitMiddleware)
     application.add_middleware(RateLimitMiddleware, **login_rate_limit_options())
     application.add_middleware(RateLimitMiddleware, **api_rate_limit_options())
+    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_origins(),
@@ -119,7 +122,6 @@ def create_app() -> FastAPI:
         # navegador bloquea el preflight de CORS.
         allow_headers=["Content-Type", "Authorization", "apikey"],
     )
-    application.add_middleware(SecurityHeadersMiddleware)
 
     install_exception_handlers(application)
 
@@ -155,11 +157,14 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
+    # La interfaz de escucha se toma del entorno (`HOST`). Por defecto se usa
+    # localhost para no exponer el servicio en todas las interfaces; en Docker
+    # o en la LAN se define `HOST=0.0.0.0` explícitamente en el entorno.
     # Nota: cuando se usa reload=True hay que pasar el string "app.main:app".
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=APP_PORT,
+        host=os.getenv("HOST") or "127.0.0.1",
+        port=int(os.getenv("PORT") or APP_PORT),
         reload=True,
         server_header=False,
     )

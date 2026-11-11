@@ -38,7 +38,7 @@ def _unauthorized() -> HTTPException:
     )
 
 
-async def authenticate_jwt(
+def authenticate_jwt(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> AuthUser:
     """Exige ``Authorization: Bearer <jwt>`` y devuelve el usuario del token."""
@@ -64,7 +64,7 @@ CurrentUser = Annotated[AuthUser, Depends(authenticate_jwt)]
 def require_role(*roles: str):
     """Fábrica de dependencias que exige alguno de los roles indicados."""
 
-    async def dependency(user: CurrentUser) -> AuthUser:
+    def dependency(user: CurrentUser) -> AuthUser:
         if user.role not in roles:
             raise HTTPException(status_code=403, detail="Acceso denegado")
 

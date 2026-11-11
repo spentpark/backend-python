@@ -1,5 +1,5 @@
 """Acceso a datos de la entidad Game (SQLAlchemy Async)."""
-import random
+import secrets
 from collections.abc import Sequence
 from typing import Any
 
@@ -33,6 +33,15 @@ DEFAULT_SORT = "id_asc"
 
 # Filtros que activan el camino "avanzado" del listado, igual que en Node.
 ADVANCED_FILTER_KEYS = ("genre", "year", "decade", "players", "sort")
+
+
+def _random_id(low: int, high: int) -> int:
+    """Entero aleatorio en ``[low, high]`` con CSPRNG (``secrets``).
+
+    Se usa ``secrets`` en lugar de ``random`` para que el generador sea
+    criptográficamente seguro aunque hoy solo sirva para elegir un juego.
+    """
+    return low + secrets.randbelow(high - low + 1)
 
 
 def has_advanced_filters(filters: dict[str, Any]) -> bool:
@@ -196,7 +205,7 @@ class GameRepository:
         min_id, max_id = bounds
 
         for _ in range(_RANDOM_ATTEMPTS):
-            candidate = random.randint(min_id, max_id)
+            candidate = _random_id(min_id, max_id)
 
             result = await self.db.execute(select(Game).where(Game.id == candidate))
             game = result.scalar_one_or_none()
@@ -227,7 +236,7 @@ class GameRepository:
             return None
 
         for _ in range(_RANDOM_ATTEMPTS):
-            candidate = random.randint(1, max_id)
+            candidate = _random_id(1, max_id)
 
             result = await self.db.execute(
                 select(Game).where(Game.id == candidate, where_clause)
