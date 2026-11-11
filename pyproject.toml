@@ -2,6 +2,22 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+# Descubrimiento explícito de paquetes: solo `app` y sus subpaquetes.
+# Sin esto, setuptools usa el modo "flat-layout" y confunde `reports/`
+# (el directorio que crea pytest con el junit.xml) con un segundo paquete
+# de primer nivel; `python -m build` falla entonces en el pipeline de Jenkins.
+[tool.setuptools.packages.find]
+namespaces = true
+include = ["app*"]
+
+# SQLAlchemy async ejecuta su capa síncrona en greenlets. Si coverage no lo
+# declara, pierde el rastro de las líneas que siguen a cada `await` de BD y
+# Sonar/Jenkins reporta ~92% aunque las pruebas cubran el 100% (en local el
+# fallo no se reprodujo, pero en el agente Linux sí). `thread` se mantiene
+# porque FastAPI ejecuta las dependencias síncronas en el threadpool.
+[tool.coverage.run]
+concurrency = ["thread", "greenlet"]
+
 [project]
 name = "backend-python"
 version = "1.0.0" # Se sobreescribe en el pipeline
