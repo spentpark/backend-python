@@ -1,0 +1,95 @@
+# Docker Compose DEL PROYECTO (fuente de verdad del despliegue).
+#
+# El Jenkinsfile publica este archivo en el servidor de despliegue
+# (/home/spentpark/gitDeploy/gitreact/docker-compose.yml) y despliega con él.
+# El docker-compose.yml que viva en la máquina NO se lee ni se usa: este archivo
+# se copia tal cual al servidor y pasa a ser el compose del stack `gitreact`.
+#
+# Contenido alineado con el compose que hoy usa la máquina
+# (/home/spentpark/gitDeploy/gitreact/docker-compose.yml):
+#   - servicio backend-python -> imagen backend-python,   contenedor backend-python
+#   - servicio frontend-react -> imagen frontend-react19, contenedor frontend-react19
+#
+# NOTA: frontend-react19 publica el mismo stack (comparten carpeta de despliegue
+# y archivo docker-compose.yml en el servidor). Mantén ambos archivos idénticos
+# para que los dos pipelines desplacen el mismo conjunto de servicios.
+#
+# IMPORTANTE: las rutas `build:` son relativas a DEPLOY_DIR en el servidor,
+# porque el Jenkinsfile sincroniza este repositorio en
+# ${DEPLOY_DIR}/backend-python y ejecuta el compose desde DEPLOY_DIR.
+services:
+  # --- Backend API (Python / FastAPI) ---
+  backend-python:
+    build: ./backend-python
+    image: backend-python
+    container_name: backend-python
+    restart: unless-stopped
+    ports:
+      - "7000:7000"
+    # `nginx.conf` del frontend hace `proxy_pass http://backend:7000/api/`, pero
+    # el servicio se llama `backend-python` para no colisionar con otros stacks
+    # del mismo servidor: se publica el alias `backend` en la red por defecto.
+    networks:
+      default:
+        aliases:
+          - backend
+    environment:
+      # development: Swagger activo y los avisos de configuración no abortan.
+      # production: fail-closed si faltan JWT_SECRET/AUTH_PASSWORD_HASH y docs
+      # apagadas salvo API_DOCS_ENABLED=true.
+      ENVIRONMENT: development
+
+      # Base de datos MySQL/MariaDB (mismos valores que backend-node20).
+      # Si usas la MariaDB local del host, cambia DB_HOST a 192.168.1.82.
+      DB_HOST: 200.83.105.123
+      DB_PORT: "3306"
+      DB_USER: admin
+      DB_PASSWORD: password
+      DB_NAME: game
+
+      # JWT HS256 compartido con backend-node20/rss-game-node: el mismo token
+      # sirve para el catálogo y para el servicio de noticias.
+      JWT_SECRET: 7456dd0b8487a4477dd5ef9078d8f9c264f82301e034f669bffa31e2b7dfe0d8
+      JWT_EXPIRES_IN: 1h
+      JWT_ISSUER: rss-game-node
+      JWT_AUDIENCE: rss-game-node-api
+      AUTH_USERNAME: admin
+      AUTH_ROLE: admin
+      # Hash bcrypt de la contraseña de desarrollo "Dev-aekiu4-9mHsG".
+      # El `$` va escapado como `$$` para que Docker Compose no lo trate como
+      # variable de sustitución. En un entorno real, usa un secreto propio.
+      AUTH_PASSWORD_HASH: "$$2b$$12$$21YmeGUU8ULL3ngZm3btLeSMswy9oOBQNXhQAdrvGTLGKP1zClT32"
+
+      # Rate limiting: 300 peticiones / 15 min por IP y 100 intentos de login
+      # (en desarrollo se sube para no bloquear las pruebas del frontend).
+      API_RATE_LIMIT_MAX: "300"
+      AUTH_RATE_LIMIT_MAX: "100"
+      API_DOCS_ENABLED: "true"
+      TRUST_PROXY: "false"
+
+      # CORS: con el proxy inverso de Nginx el navegador llama al mismo origen,
+      # así que la allowlist por defecto basta. Descomenta para permitir que
+      # otros frontends llamen directamente a este backend:
+      # CORS_ORIGINS: http://192.168.1.82:8065,http://200.83.105.123:8065
+
+  # --- Frontend (React + Vite servido por Nginx) ---
+  frontend-react:
+    build:
+      context: ./frontend-react19
+      # Rutas relativas: el navegador llama al mismo origen y Nginx resuelve
+      # `/api` y `/news-api` contra los servicios de la red de Compose. Para que
+      # el frontend llame directamente a otra API, pasa URLs completas:
+      #   VITE_API_URL=http://200.83.105.123:7000/api
+      #   VITE_NEWS_API_URL=http://200.83.105.123:3001/api
+      args:
+        VITE_API_URL: /api
+        VITE_NEWS_API_URL: /news-api
+    image: frontend-react19
+    container_name: frontend-react19
+    restart: unless-stopped
+    ports:
+      - "8065:8065"
+    # `depends_on` lo usa el compose para arrancar también el backend cuando el
+    # pipeline levanta el frontend: el stack se queda completo con un solo job.
+    depends_on:
+      - backend-python
