@@ -1,0 +1,2 @@
+# Mantiene el directorio `reports/` versionado para que pytest pueda escribir
+# el reporte JUnit XML (`reports/junit.xml`) sin fallar por directorio inexistente.
